@@ -40,8 +40,8 @@ FEATURES: list[FeatureStatus] = [
         key="element_map",
         title="Анализ и карта элементов",
         stage="2",
-        status="planned",
-        description="Детерминированные эвристики + локальная модель описывают элементы",
+        status="done",
+        description="Эвристики и локальная модель: роли, устойчивые селекторы, отчёт о странице",
     ),
     FeatureStatus(
         key="visual_editor",
@@ -104,7 +104,7 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="1",
         title="Браузер и снапшот страницы",
-        status="in_progress",
+        status="done",
         items=[
             "обёртка Playwright",
             "снапшот: DOM, скриншоты, сеть, storage state",
@@ -116,8 +116,14 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="2",
         title="Анализ: карта элементов и ИИ-описания",
-        status="planned",
-        items=["детерминированный предпроход", "LLM со структурным выводом", "скоринг селекторов"],
+        status="in_progress",
+        items=[
+            "лёгкий DOM-парсер",
+            "детерминированный предпроход",
+            "LLM со структурным выводом",
+            "скоринг селекторов",
+            "отчёт о странице",
+        ],
     ),
     StageInfo(
         key="3",
@@ -157,7 +163,7 @@ STAGES: list[StageInfo] = [
     ),
 ]
 
-CURRENT_STAGE = "1"
+CURRENT_STAGE = "3"
 
 
 def _settings(request: Request) -> Settings:

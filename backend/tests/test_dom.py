@@ -42,7 +42,9 @@ def test_collapses_repeated_product_cards() -> None:
     result = trim_html(html, max_tokens=100_000)
 
     assert result.stats.collapsed_duplicates == 9  # 12 карточек минус 3 показанные
-    assert "скрыто ещё 9 однотипных" in result.html
+    # Пометка несёт полный размер списка: по ней анализ узнаёт, что карточек 12.
+    assert "список из 12 однотипных элементов" in result.html
+    assert "показаны первые 3" in result.html
     # Три примера карточек остаются — по ним видно структуру.
     assert result.html.count('class="product-card" data-sku=') == 3
 
@@ -65,6 +67,20 @@ def test_keeps_semantic_attributes_and_drops_noise() -> None:
     assert "doEvil" not in result.html
     assert "style=" not in result.html
     assert "tabindex" not in result.html  # не входит в список значимых
+
+
+def test_keeps_pagination_and_microdata_attributes() -> None:
+    """rel и itemprop — признаки, по которым анализатор находит пагинацию и цены."""
+    html = """
+    <nav class="pagination">
+      <a class="pagination__next" rel="next" href="/catalog?page=2">Следующая</a>
+      <span class="price" itemprop="price">1 000 ₽</span>
+    </nav>
+    """
+    result = trim_html(html, max_tokens=100_000)
+
+    assert 'rel="next"' in result.html
+    assert 'itemprop="price"' in result.html
 
 
 def test_makes_urls_absolute() -> None:

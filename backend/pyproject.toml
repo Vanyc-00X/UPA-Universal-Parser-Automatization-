@@ -50,6 +50,13 @@ target-version = "py310"
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
 ignore = ["B008"]
 
+[tool.ruff.lint.per-file-ignores]
+# Набор тестовых страниц: длинные строки HTML намеренны — разметка читается
+# лучше, когда повторяет настоящую вёрстку, а не разбита переносами.
+"tests/pages.py" = ["E501"]
+# Тесты парсера содержат длинные строки разметки по той же причине.
+"tests/test_domlite.py" = ["E501"]
+
 [tool.black]
 line-length = 100
 target-version = ["py310"]

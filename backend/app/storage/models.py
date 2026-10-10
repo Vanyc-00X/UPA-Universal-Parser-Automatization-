@@ -164,7 +164,8 @@ class ElementMap(TimestampMixin, Base):
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     # Список элементов: см. app.api.schemas.ElementOut
     elements: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
-    # Человекочитаемый отчёт «что есть на странице».
+    # Полный человекочитаемый отчёт о странице: что найдено и за что отвечает.
+    # В API отдаётся как поле report.
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Какие ИИ-модель и промпт использовались (для воспроизводимости).
     llm_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)

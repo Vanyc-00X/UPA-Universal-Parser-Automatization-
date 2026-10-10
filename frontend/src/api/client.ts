@@ -23,6 +23,14 @@ import type {
   SnapshotListResponse,
   SnapshotNetworkResponse,
 } from './crawlTypes'
+import type {
+  AnalyzeRequest,
+  ElementMapListResponse,
+  ElementMapOut,
+  ElementUpdateRequest,
+  ReportResponse,
+  RolesResponse,
+} from './analyzeTypes'
 
 const API_PREFIX = '/api/v1'
 
@@ -126,6 +134,23 @@ export const api = {
     del<SnapshotDeleteResponse>(`${API_PREFIX}/snapshots/${id}`),
   sites: (params: { limit?: number; offset?: number } = {}) =>
     request<SiteListResponse>(`${API_PREFIX}/sites${query(params)}`),
+
+  // --- Этап 2: анализ и карта элементов ----------------------------------
+  analyzeSnapshot: (snapshotId: string, payload: AnalyzeRequest = {}) =>
+    post<ElementMapOut>(`${API_PREFIX}/snapshots/${snapshotId}/analyze`, payload),
+  elementMap: (snapshotId: string) =>
+    request<ElementMapOut>(`${API_PREFIX}/snapshots/${snapshotId}/element-map`),
+  elementMaps: (params: { limit?: number; offset?: number } = {}) =>
+    request<ElementMapListResponse>(`${API_PREFIX}/element-maps${query(params)}`),
+  updateElement: (snapshotId: string, index: number, payload: ElementUpdateRequest) =>
+    request<ElementMapOut>(`${API_PREFIX}/snapshots/${snapshotId}/element-map/${index}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  report: (snapshotId: string) =>
+    request<ReportResponse>(`${API_PREFIX}/snapshots/${snapshotId}/report`),
+  roles: () => request<RolesResponse>(`${API_PREFIX}/roles`),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */
@@ -141,4 +166,7 @@ export const queryKeys = {
   snapshotNetwork: (id: string, onlySources: boolean) =>
     ['snapshot', id, 'network', onlySources] as const,
   snapshotDom: (id: string, variant: DomVariant) => ['snapshot', id, 'dom', variant] as const,
+  elementMap: (snapshotId: string) => ['element-map', snapshotId] as const,
+  elementMaps: ['element-maps'] as const,
+  roles: ['roles'] as const,
 }

@@ -93,6 +93,12 @@ _HARD_KEEP = {
     "lang",
     "dir",
     "target",
+    # rel="next"/"prev" — стандартный признак пагинации, itemprop — микроразметка
+    # Schema.org. Оба нужны для анализа, поэтому сохраняются всегда.
+    "rel",
+    "itemprop",
+    "itemscope",
+    "itemtype",
 }
 
 # Текст, который не несёт смысла и часто мешает модели.
@@ -368,6 +374,11 @@ def trim_html(
         skeleton = source
         wrapper_open, wrapper_close = "", ""
 
+    # Комментарии вырезаем до токенизации: жадное сопоставление тегов иначе
+    # «съедает» вместе с комментарием весь следующий текст.
+    skeleton, removed_comments = _COMMENT_RE.subn("", skeleton)
+    stats.removed_comments += removed_comments
+
     cleaned = _strip_noise(skeleton, stats)
 
     # --- Шаг 2-3: пересборка тегов и нормализация текста --------------------
@@ -385,6 +396,13 @@ def trim_html(
     collapsed = _collapse_repeated_blocks(pieces, stats)
 
     html = wrapper_open + "".join(collapsed) + wrapper_close
+
+    # Пометки о схлопнутых списках выносим в конец документа: по ним анализатор
+    # узнаёт полный размер списка, а не только число оставленных примеров.
+    # Внутри списка их держать нельзя — повторная обрезка их бы удалила.
+    marker_notes = [piece for piece in collapsed if piece.startswith("<!-- UPA:")]
+    if marker_notes:
+        html += "".join(marker_notes)
 
     # --- Шаг 5: жёсткое обрезание по лимиту ---------------------------------
     html, truncated = _cap_tokens(html, max_tokens)
@@ -537,14 +555,16 @@ def _collapse_level(tokens: list[str], stats: TrimStats, keep: int) -> list[str]
                 stats.collapsed_duplicates += 1
                 continue
             if skipped:
-                out.append(_repeat_marker(skipped))
+                total = keep + skipped
+                out.append(_repeat_marker(skipped, total, keep))
                 skipped = 0
 
         opening, closing = block[0], block[-1]
         out.extend([opening, *_collapse_level(block[1:-1], stats, keep), closing])
 
     if skipped:
-        out.append(_repeat_marker(skipped))
+        total = keep + skipped
+        out.append(_repeat_marker(skipped, total, keep))
     return out
 
 
@@ -560,10 +580,16 @@ def _collapse_repeated_blocks(pieces: list[str], stats: TrimStats) -> list[str]:
     return _collapse_level(pieces, stats, keep=3)
 
 
-def _repeat_marker(count: int) -> str:
+def _repeat_marker(count: int, total: int, shown: int) -> str:
+    """Пометка о схлопнутых повторах.
+
+    В пометке сохраняется **полное** число элементов списка. Это принципиально:
+    обрезка удаляет лишние карточки, и без такой пометки анализатор, работающий
+    по обрезанному DOM, сообщил бы «в списке 3 элемента» вместо 12.
+    """
     return (
-        f"<!-- UPA: скрыто ещё {count} однотипных повторяющихся блоков "
-        f"(список продолжается) -->"
+        f"<!-- UPA: список из {total} однотипных элементов, "
+        f"показаны первые {shown}, скрыто ещё {count} -->"
     )
 
 
