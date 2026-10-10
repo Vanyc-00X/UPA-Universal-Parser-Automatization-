@@ -1,0 +1,47 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+# Каталоги временных данных pytest (создаются при запуске тестов из backend/)
+pytest-of-*/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# ---- Node ----
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ---- Данные приложения (UPA) ----
+data/
+!data/.gitkeep
+
+# ---- Служебные каталоги окружения ----
+# Загруженные колёса зависимостей (см. tools/fetch_wheels.py)
+data/_wheels/
+# Браузер Playwright и временные файлы, если они уведены внутрь репозитория
+data/_pw-browsers/
+data/_tmp/
+
+# ---- Секреты и локальные настройки ----
+.env
+.env.local
+*.local.toml
+
+# ---- Артефакты диагностики DSH ----
+.dsh-diagnostics/
+
+# ---- ОС и редакторы ----
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
