@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
-import { api, queryKeys } from '../api/client'
+import { ApiError, api, queryKeys } from '../api/client'
 import { Badge, Card, KeyValue } from '../components/Card'
 
 const COMPONENT_LABELS: Record<string, string> = {
@@ -18,10 +20,26 @@ const STATUS_TONE: Record<string, 'ok' | 'warn' | 'error' | 'neutral'> = {
 
 /** Главный экран: состояние подсистем и готовность этапов. */
 export function DashboardPage() {
+  const queryClient = useQueryClient()
+  const [llmNotice, setLlmNotice] = useState<string | null>(null)
+  const [llmError, setLlmError] = useState<string | null>(null)
   const health = useQuery({ queryKey: queryKeys.health, queryFn: api.health, refetchInterval: 15_000 })
   const info = useQuery({ queryKey: queryKeys.systemInfo, queryFn: api.systemInfo })
   const llm = useQuery({ queryKey: queryKeys.llm, queryFn: api.llmStatus })
   const features = useQuery({ queryKey: queryKeys.features, queryFn: api.features })
+
+  const ensureLlm = useMutation({
+    mutationFn: (pull: boolean) => api.ensureLlm(pull),
+    onSuccess: (result) => {
+      setLlmNotice(result.detail)
+      setLlmError(null)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.llm })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.health })
+    },
+    onError: (err: unknown) => {
+      setLlmError(err instanceof ApiError ? err.message : String(err))
+    },
+  })
 
   return (
     <div className="grid">
@@ -38,7 +56,10 @@ export function DashboardPage() {
           <p className="error-text">
             Бэкенд не отвечает: {health.error.message}
             <br />
-            <span className="muted">Запустите <code>.\run.ps1</code> из корня репозитория.</span>
+            <span className="muted">
+              Запустите <code>.\run.ps1</code> или <code>launch.cmd</code> из корня репозитория.
+              Подсказка — в разделе <Link to="/help">Справка</Link>.
+            </span>
           </p>
         ) : null}
 
@@ -97,10 +118,30 @@ export function DashboardPage() {
               ]}
             />
             {llm.data.detail ? <p className="muted">{llm.data.detail}</p> : null}
+            {llmError ? <p className="error-text">{llmError}</p> : null}
+            {llmNotice ? <p className="muted">{llmNotice}</p> : null}
+            <div className="form-row" style={{ marginTop: 10 }}>
+              <button
+                className="btn"
+                type="button"
+                disabled={ensureLlm.isPending}
+                onClick={() => ensureLlm.mutate(false)}
+              >
+                Проверить Ollama
+              </button>
+              <button
+                className="btn btn--primary"
+                type="button"
+                disabled={ensureLlm.isPending}
+                onClick={() => ensureLlm.mutate(true)}
+              >
+                {ensureLlm.isPending ? 'Загрузка…' : 'Загрузить модель'}
+              </button>
+            </div>
             {!llm.data.available ? (
               <p className="muted">
-                Запустите Ollama и загрузите модель — анализ страниц станет доступен. Ручной
-                выбор элементов будет работать в любом случае.
+                Запустите Ollama или продолжайте без ИИ: эвристики и ручной выбор элементов
+                доступны всегда.
               </p>
             ) : null}
           </>

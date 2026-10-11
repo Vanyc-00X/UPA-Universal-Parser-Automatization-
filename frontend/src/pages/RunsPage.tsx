@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 
 import { ApiError, api, queryKeys } from '../api/client'
 import { RUN_STATUS_LABEL, type RunOut, type RunStatus } from '../api/runTypes'
 import { Badge, Card, KeyValue } from '../components/Card'
+import { EmptyState } from '../components/EmptyState'
 import { formatDateTime, formatNumber } from '../utils/format'
 
 const STATUS_TONE: Record<RunStatus, 'ok' | 'warn' | 'error' | 'neutral'> = {
@@ -180,11 +180,12 @@ export function RunsPage() {
         {notice ? <p className="muted">{notice}</p> : null}
         {runs.isLoading ? <p className="muted">Загружаю…</p> : null}
         {runs.data && runs.data.items.length === 0 ? (
-          <p className="muted">
-            Запусков ещё нет. Сохраните сценарий на{' '}
-            <Link to="/element-map">Карте элементов</Link> и запустите его в разделе{' '}
-            <Link to="/scenarios">Сценарии</Link>.
-          </p>
+          <EmptyState
+            title="Запусков ещё нет"
+            description="Сохраните сценарий на карте элементов или возьмите шаблон — затем запустите его."
+            actionTo="/scenarios"
+            actionLabel="К сценариям"
+          />
         ) : null}
 
         {runs.data && runs.data.items.length > 0 ? (

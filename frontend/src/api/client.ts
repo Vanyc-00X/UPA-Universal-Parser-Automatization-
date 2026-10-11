@@ -67,6 +67,12 @@ import type {
   WorkflowSaveRequest,
   WorkflowSaveResponse,
 } from './workflowTypes'
+import type {
+  EnsureLlmResponse,
+  TemplateDetail,
+  TemplateKind,
+  TemplateListResponse,
+} from './packagingTypes'
 
 const API_PREFIX = '/api/v1'
 
@@ -414,6 +420,16 @@ export const api = {
   }) => post<RecordingResponse>(`${API_PREFIX}/workflows/from-recording`, payload),
   humanizeWorkflow: (workflow: WorkflowDefinition) =>
     post<HumanizeResponse>(`${API_PREFIX}/workflows/humanize`, { workflow }),
+
+  // --- Этап 8: шаблоны и ensure LLM --------------------------------------
+  templates: (kind?: TemplateKind) =>
+    request<TemplateListResponse>(
+      `${API_PREFIX}/templates${kind ? query({ kind }) : ''}`,
+    ),
+  template: (templateId: string) =>
+    request<TemplateDetail>(`${API_PREFIX}/templates/${templateId}`),
+  ensureLlm: (pull = false) =>
+    post<EnsureLlmResponse>(`${API_PREFIX}/system/llm/ensure`, { pull }),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */
@@ -440,4 +456,5 @@ export const queryKeys = {
   runs: (scenarioId?: string) => ['runs', scenarioId ?? 'all'] as const,
   run: (runId: string) => ['run', runId] as const,
   runItems: (runId: string) => ['run-items', runId] as const,
+  templates: (kind?: string) => ['templates', kind ?? 'all'] as const,
 }

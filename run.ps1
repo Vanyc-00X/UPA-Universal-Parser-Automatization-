@@ -19,10 +19,14 @@
 .PARAMETER Headed
     Показать окно браузера (полезно для сайтов за логином). Влияет на Этап 1.
 
+.PARAMETER PullModel
+    Если Ollama доступна, а модель из настроек отсутствует — выполнить ollama pull.
+
 .EXAMPLE
     .\run.ps1
     .\run.ps1 -Headed
     .\run.ps1 -SkipFrontend
+    .\run.ps1 -PullModel
 
 .NOTES
     Первый запуск занимает несколько минут: создание venv и установка зависимостей.
@@ -32,7 +36,8 @@
 param(
     [switch]$SkipFrontend,
     [switch]$SkipInstall,
-    [switch]$Headed
+    [switch]$Headed,
+    [switch]$PullModel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -133,14 +138,43 @@ try {
 
 Write-Step 'Проверяю локальную ИИ-модель (Ollama)'
 $llmReady = $false
+$WantedModel = if ($env:UPA_OLLAMA_MODEL) { $env:UPA_OLLAMA_MODEL } else { 'qwen2.5:7b' }
 try {
     $tags = Invoke-RestMethod -Uri "$OllamaUrl/api/tags" -TimeoutSec 3 -ErrorAction Stop
     $modelNames = @($tags.models | ForEach-Object { $_.name })
-    if ($modelNames.Count -gt 0) {
+    $hasWanted = $modelNames | Where-Object { $_ -eq $WantedModel -or $_.StartsWith("$WantedModel:") }
+    if ($hasWanted) {
         $llmReady = $true
-        Write-Ok "Ollama доступна, моделей: $($modelNames.Count) ($($modelNames[0]))"
+        Write-Ok "Ollama доступна, модель $WantedModel на месте"
+    } elseif ($modelNames.Count -gt 0) {
+        Write-Warn "Ollama доступна, но нет $WantedModel (есть: $($modelNames[0])). Запуск с эвристиками."
+        if ($PullModel) {
+            Write-Step "Загружаю модель $WantedModel (это может занять несколько минут)"
+            $ollamaExe = Get-CommandPath @('ollama')
+            if ($ollamaExe) {
+                & $ollamaExe pull $WantedModel
+                if ($LASTEXITCODE -eq 0) {
+                    $llmReady = $true
+                    Write-Ok "Модель $WantedModel загружена"
+                } else {
+                    Write-Warn "Не удалось выполнить ollama pull $WantedModel — продолжаю без ИИ"
+                }
+            } else {
+                Write-Warn 'Команда ollama не в PATH — загрузите модель вручную или через UI'
+            }
+        } else {
+            Write-Warn "Чтобы подтянуть модель: .\run.ps1 -PullModel   или   ollama pull $WantedModel"
+        }
     } else {
-        Write-Warn 'Ollama доступна, но модели не загружены: ollama pull qwen2.5:7b'
+        Write-Warn "Ollama доступна, но модели не загружены: ollama pull $WantedModel"
+        if ($PullModel) {
+            Write-Step "Загружаю модель $WantedModel"
+            $ollamaExe = Get-CommandPath @('ollama')
+            if ($ollamaExe) {
+                & $ollamaExe pull $WantedModel
+                if ($LASTEXITCODE -eq 0) { $llmReady = $true; Write-Ok "Модель $WantedModel загружена" }
+            }
+        }
     }
 } catch {
     Write-Warn 'Ollama недоступна — приложение запустится без ИИ (ручной выбор элементов).'

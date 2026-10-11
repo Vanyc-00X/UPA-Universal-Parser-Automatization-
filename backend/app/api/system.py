@@ -82,8 +82,8 @@ FEATURES: list[FeatureStatus] = [
         key="packaging",
         title="Упаковка и документация",
         stage="8",
-        status="planned",
-        description="Лаунчер, онбординг, документация",
+        status="done",
+        description="Онбординг, шаблоны, ensure Ollama, лаунчер Windows, документация",
     ),
 ]
 
@@ -184,8 +184,14 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="8",
         title="Упаковка и документация",
-        status="in_progress",
-        items=["лаунчер", "онбординг", "документация"],
+        status="done",
+        items=[
+            "онбординг-визард и пустые состояния",
+            "шаблоны сценариев и примеры CSV",
+            "проверка/загрузка модели Ollama",
+            "лаунчер Windows и Docker Compose",
+            "документация: быстрый старт, FAQ, дисклеймер",
+        ],
     ),
 ]
 

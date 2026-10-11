@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { ApiError, api, queryKeys } from '../api/client'
 import { Badge, Card, KeyValue } from '../components/Card'
+import { EmptyState } from '../components/EmptyState'
 import { SnapshotDetail } from '../components/SnapshotDetail'
 import { SnapshotList } from '../components/SnapshotList'
 import { formatDateTime, formatNumber } from '../utils/format'
@@ -108,7 +109,10 @@ export function SitesPage() {
         >
           {sites.isLoading ? <p className="muted">Загружаю…</p> : null}
           {sites.data && sites.data.items.length === 0 ? (
-            <p className="muted">Пока пусто. Изучите первый сайт — он появится здесь.</p>
+            <EmptyState
+              title="Сайтов пока нет"
+              description="Вставьте URL выше и снимите первый снапшот — сайт появится в списке."
+            />
           ) : null}
           <ul className="site-list">
             {sites.data?.items.map((site) => (

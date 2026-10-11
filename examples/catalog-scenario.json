@@ -1,0 +1,35 @@
+{
+  "url": "https://shop.example.com/catalog",
+  "title": "Каталог товаров",
+  "description": "Пример сценария сбора списка товаров",
+  "plan": {
+    "mode": "list",
+    "item_selector": ".product-card"
+  },
+  "pagination": {
+    "kind": "next_link",
+    "selector": "a.pagination__next",
+    "max_pages": 5
+  },
+  "fields": [
+    {
+      "key": "title",
+      "title": "Название",
+      "selector": ".product-card__title",
+      "required": true
+    },
+    {
+      "key": "price",
+      "title": "Цена",
+      "selector": ".product-card__price"
+    },
+    {
+      "key": "url",
+      "title": "Ссылка",
+      "selector": "a.product-card__link",
+      "strategy": "attribute",
+      "attribute": "href"
+    }
+  ],
+  "created_from": "template"
+}

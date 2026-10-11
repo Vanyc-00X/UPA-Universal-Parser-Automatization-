@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { ApiError, api, queryKeys } from '../api/client'
 import { PAGINATION_LABELS, PLAN_LABELS } from '../api/scenarioTypes'
 import { Badge, Card } from '../components/Card'
+import { EmptyState } from '../components/EmptyState'
 import { formatDateTime, shortenUrl } from '../utils/format'
 
 /** Сценарии: список сохранённых рецептов и запуск сбора. */
@@ -75,10 +76,12 @@ export function ScenariosPage() {
         {notice ? <p className="muted">{notice}</p> : null}
         {scenarios.isLoading ? <p className="muted">Загружаю…</p> : null}
         {scenarios.data && scenarios.data.items.length === 0 ? (
-          <p className="muted">
-            Сценариев пока нет. Откройте <Link to="/element-map">Карту элементов</Link>, проверьте
-            поля и сохраните сценарий.
-          </p>
+          <EmptyState
+            title="Сценариев пока нет"
+            description="Снимите снапшот, отметьте поля на карте элементов или возьмите готовый шаблон."
+            actionTo="/templates"
+            actionLabel="Открыть шаблоны"
+          />
         ) : null}
 
         {scenarios.data && scenarios.data.items.length > 0 ? (

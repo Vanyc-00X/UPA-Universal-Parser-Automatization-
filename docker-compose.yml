@@ -1,0 +1,19 @@
+# Локальный запуск API UPA в Docker.
+# Фронтенд для разработки удобнее через .\run.ps1; здесь — API + том данных.
+services:
+  upa-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      UPA_ENV: production
+      UPA_LLM_PROVIDER: none
+      UPA_DATA_DIR: /data
+    volumes:
+      - upa-data:/data
+    restart: unless-stopped
+
+volumes:
+  upa-data:

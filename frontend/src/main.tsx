@@ -5,6 +5,9 @@ import { BrowserRouter } from 'react-router-dom'
 
 import { App } from './App'
 import './styles/global.css'
+import { applyTheme, getStoredTheme } from './utils/theme'
+
+applyTheme(getStoredTheme())
 
 /**
  * Настройки кэша подобраны под локальное приложение: данные меняются редко,
