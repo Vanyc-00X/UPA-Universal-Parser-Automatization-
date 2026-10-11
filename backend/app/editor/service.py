@@ -597,8 +597,12 @@ def validate_definition(
             elif container.count == 0:
                 problems.append("Контейнер списка не найден на странице")
 
-    if definition.plan.mode == "api" and not definition.plan.api_url:
-        problems.append("Режим api выбран, но адрес запроса не указан")
+    if definition.plan.mode == "api":
+        if not definition.plan.records_path:
+            problems.append(
+                "Режим XHR/JSON: укажите путь к списку записей (records_path), например data.items"
+            )
+        # api_url необязателен: UPA сама выберет самый богатый JSON из network.
 
     if definition.pagination.kind is not PaginationKind.NONE:
         pagination = definition.pagination

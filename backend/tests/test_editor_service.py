@@ -194,14 +194,14 @@ def test_validate_pagination_requirements() -> None:
     assert any("ничего не находит" in problem for problem in result.problems)
 
 
-def test_validate_api_mode_requires_url() -> None:
+def test_validate_api_mode_requires_records_path() -> None:
     definition = ScenarioDefinition(
         url="https://a.com",
         plan=ExtractionPlan(mode="api"),
-        fields=[FieldSpec(key="t", title="Т", selector="h1")],
+        fields=[FieldSpec(key="t", title="Т", selector="name")],
     )
     result = editor.validate_definition(editor.parse_html_for_validation(CATALOG.html), definition)
-    assert any("адрес запроса не указан" in problem for problem in result.problems)
+    assert any("records_path" in problem for problem in result.problems)
 
 
 def test_validate_non_unique_selector_is_allowed_but_reported() -> None:

@@ -174,7 +174,7 @@ async def run_definition(
         "снапшот загружен" if html else "DOM снапшота отсутствует",
         snapshot_id=snapshot_id,
     )
-    if html is None and fetch_page is None:
+    if definition.plan.mode != "api" and html is None and fetch_page is None:
         raise NotFoundError(
             "Не найден DOM для запуска: укажите снапшот или разрешите догрузку страниц",
             details={"snapshot_id": snapshot_id},
@@ -195,9 +195,68 @@ async def run_definition(
     duplicates = 0
     stopped_reason: str | None = None
 
+    # --- Режим XHR/JSON: одна выборка из network снапшота --------------------
+    if definition.plan.mode == "api":
+        from app.engine import json_extract
+
+        if not snapshot_id:
+            raise ValidationError("Для режима XHR/JSON нужен snapshot_id")
+        payload, source_url = json_extract.pick_network_payload(
+            settings, snapshot_id, api_url=definition.plan.api_url
+        )
+        if payload is None:
+            raise ValidationError(
+                "В снапшоте нет JSON/XHR ответов с телом. "
+                "Снимите страницу ещё раз или выберите режим HTML.",
+                details={"snapshot_id": snapshot_id},
+            )
+        journal.info(
+            "json_source",
+            "взял JSON из сети снапшота",
+            source_url=source_url,
+            records_path=definition.plan.records_path,
+        )
+        result = json_extract.extract_from_json(
+            payload, definition, source_url=source_url or base_url, limit=max_records
+        )
+        if result.errors:
+            run.stats = {
+                "journal": journal.as_list(),
+                "mode": "api",
+                "source_url": source_url,
+                "errors": result.errors,
+            }
+            await _finish_run(session, run, RunStatus.FAILED, "; ".join(result.errors))
+            raise ValidationError(
+                "Не удалось разобрать JSON", details={"errors": result.errors}
+            )
+        for record in result.records:
+            key = _record_key(record, definition)
+            if key in seen_keys:
+                duplicates += 1
+                continue
+            seen_keys.add(key)
+            records.append(record)
+        pages.append(
+            PageResult(
+                number=1,
+                url=source_url or base_url,
+                records=len(records),
+                is_valid=True,
+                note="; ".join(result.warnings) or "xhr/json",
+            )
+        )
+        journal.info("json_extract", f"собрано {len(records)} записей из JSON")
+        stopped_reason = None
+        fetch_attempts = []
+        # Дальше — общий блок сохранения (ниже по функции), HTML-обход пропускаем.
+        skip_html_crawl = True
+    else:
+        skip_html_crawl = False
+
     # --- Первая страница ----------------------------------------------------
     first_html = html
-    if first_html is None and fetch_page is not None:
+    if not skip_html_crawl and first_html is None and fetch_page is not None:
         first_html, problem, fetch_attempts = await with_retries(
             lambda: fetch_page(base_url),
             max_attempts=settings.fetch_max_retries,
@@ -227,7 +286,7 @@ async def run_definition(
     page_number = first_visit.number
 
     # --- Обход страниц ------------------------------------------------------
-    while True:
+    while not skip_html_crawl:
         if len(records) >= max_records:
             stopped_reason = f"достигнут предел в {max_records} записей"
             break
@@ -708,13 +767,38 @@ async def preview_definition(
 ) -> dict[str, Any]:
     """Предпросмотр: что соберётся с указанного снапшота, без сохранения запуска."""
     html, snapshot = await _snapshot_html(session, settings, snapshot_id)
+    base_url = (snapshot.final_url or snapshot.url) if snapshot else definition.url
+
+    if definition.plan.mode == "api":
+        from app.engine import json_extract
+
+        payload, source_url = json_extract.pick_network_payload(
+            settings, snapshot_id, api_url=definition.plan.api_url
+        )
+        if payload is None:
+            raise NotFoundError(
+                "В снапшоте нет JSON/XHR с телом — снимите страницу ещё раз",
+                details={"snapshot_id": snapshot_id},
+            )
+        result = json_extract.extract_from_json(
+            payload, definition, source_url=source_url or base_url, limit=limit
+        )
+        report = validate.build_report(result, definition, base_url=base_url)
+        return {
+            "records": [record.as_dict() for record in result.records],
+            "extraction": result.as_dict(definition),
+            "report": report.as_dict(),
+            "report_text": validate.describe_report(report),
+            "source": "xhr/json",
+            "source_url": source_url,
+        }
+
     if html is None:
         raise NotFoundError(
             "Артефакты снапшота не найдены — снимите снапшот заново",
             details={"snapshot_id": snapshot_id},
         )
 
-    base_url = snapshot.final_url or snapshot.url
     document = parse(html)
     result = extractor.extract_page(document, definition, base_url=base_url, limit=limit)
     report = validate.build_report(result, definition, base_url=base_url)
@@ -724,6 +808,7 @@ async def preview_definition(
         "extraction": result.as_dict(definition),
         "report": report.as_dict(),
         "report_text": validate.describe_report(report),
+        "source": "html",
     }
 
 

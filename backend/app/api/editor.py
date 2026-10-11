@@ -423,7 +423,7 @@ async def update_plan(
     plan_data: dict[str, Any] = draft.plan.model_dump()
     if payload.plan_mode is not None:
         plan_data["mode"] = payload.plan_mode
-    for name in ("container_selector", "item_selector", "api_url"):
+    for name in ("container_selector", "item_selector", "api_url", "records_path"):
         value = getattr(payload, name)
         if value is not None:
             plan_data[name] = value or None

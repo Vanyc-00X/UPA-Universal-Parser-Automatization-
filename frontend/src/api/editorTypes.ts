@@ -129,6 +129,7 @@ export interface PlanUpdateRequest {
   container_selector?: string | null
   item_selector?: string | null
   api_url?: string | null
+  records_path?: string | null
   pagination?: Record<string, unknown>
 }
 

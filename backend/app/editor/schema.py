@@ -43,16 +43,21 @@ class ExtractionPlan(BaseModel):
 
     mode: Literal["list", "single", "api", "llm"] = Field(
         "list",
-        description="list — список однотипных записей, single — одна запись, "
-        "api — из JSON-запроса, llm — моделью по очищенному HTML",
+        description="list — HTML-список, single — одна HTML-запись, "
+        "api — из XHR/JSON снапшота, llm — моделью по очищенному HTML",
     )
     # Селектор контейнера списка или корневого блока записи.
     container_selector: str | None = None
     # Селектор повторов: если задан, контейнер вычисляется как родитель совпадений.
     item_selector: str | None = None
-    # Адрес JSON-источника для режима api.
+    # Адрес JSON-источника для режима api (подстрока URL из network).
     api_url: str | None = None
     api_method: str = "GET"
+    # Путь к массиву записей в JSON, например data.items или results[*].
+    records_path: str | None = Field(
+        None,
+        description="JSON-путь к списку записей для mode=api (например data.items)",
+    )
 
 
 class PaginationSpec(BaseModel):

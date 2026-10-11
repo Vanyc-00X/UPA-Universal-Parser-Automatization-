@@ -24,6 +24,7 @@ export interface ExtractionPlan {
   item_selector: string | null
   api_url: string | null
   api_method: string
+  records_path: string | null
 }
 
 export interface PaginationSpec {
@@ -100,8 +101,8 @@ export const PAGINATION_LABELS: Record<PaginationKind, string> = {
 }
 
 export const PLAN_LABELS: Record<PlanMode, string> = {
-  list: 'список записей',
-  single: 'одна запись',
-  api: 'JSON-запрос',
+  list: 'HTML: список записей',
+  single: 'HTML: одна запись',
+  api: 'XHR/JSON из сети',
   llm: 'разбор моделью',
 }

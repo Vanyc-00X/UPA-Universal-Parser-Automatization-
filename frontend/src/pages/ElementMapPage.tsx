@@ -675,10 +675,13 @@ export function ElementMapPage() {
               </div>
             </Card>
 
-            <Card title="План сбора" subtitle="Откуда брать записи и как переходить дальше">
+            <Card
+              title="План сбора"
+              subtitle="HTML (DOM) или XHR/JSON из сети снапшота — выберите источник данных"
+            >
               <div className="form-grid">
                 <label className="field">
-                  <span>Режим</span>
+                  <span>Источник / режим</span>
                   <select
                     className="input"
                     value={state.draft.plan.mode}
@@ -714,6 +717,7 @@ export function ElementMapPage() {
                         },
                       })
                     }
+                    disabled={state.draft.plan.mode === 'api'}
                   >
                     {Object.entries(PAGINATION_LABELS).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -722,11 +726,52 @@ export function ElementMapPage() {
                     ))}
                   </select>
                 </label>
+                {state.draft.plan.mode === 'api' ? (
+                  <>
+                    <label className="field form-grid__full">
+                      <span>Путь к списку в JSON (records_path)</span>
+                      <input
+                        className="input"
+                        placeholder="data.items"
+                        defaultValue={state.draft.plan.records_path ?? ''}
+                        onBlur={(event) =>
+                          snapshotId &&
+                          api
+                            .updatePlan(snapshotId, { records_path: event.target.value || null })
+                            .then(applyState)
+                            .catch(fail)
+                        }
+                      />
+                    </label>
+                    <label className="field form-grid__full">
+                      <span>Фильтр URL запроса (необязательно)</span>
+                      <input
+                        className="input"
+                        placeholder="/api/products"
+                        defaultValue={state.draft.plan.api_url ?? ''}
+                        onBlur={(event) =>
+                          snapshotId &&
+                          api
+                            .updatePlan(snapshotId, { api_url: event.target.value || null })
+                            .then(applyState)
+                            .catch(fail)
+                        }
+                      />
+                    </label>
+                    <p className="muted small form-grid__full">
+                      В режиме XHR/JSON селекторы полей — это пути внутри записи
+                      (<code>name</code>, <code>price.value</code>). Тело берётся из network
+                      снапшота.
+                    </p>
+                  </>
+                ) : null}
               </div>
 
               <KeyValue
                 items={[
                   ['Контейнер списка', state.draft.plan.container_selector ?? '—'],
+                  ['JSON records_path', state.draft.plan.records_path ?? '—'],
+                  ['JSON api_url', state.draft.plan.api_url ?? '—'],
                   ['Селектор «далее»', state.draft.pagination.selector ?? '—'],
                   ['Шаблон адреса', state.draft.pagination.url_template ?? '—'],
                   ['Максимум страниц', String(state.draft.pagination.max_pages)],

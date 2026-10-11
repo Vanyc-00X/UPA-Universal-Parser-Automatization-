@@ -157,6 +157,7 @@ class PlanUpdateRequest(BaseModel):
     container_selector: str | None = None
     item_selector: str | None = None
     api_url: str | None = None
+    records_path: str | None = None
     pagination: PaginationSpec | None = None
 
 
