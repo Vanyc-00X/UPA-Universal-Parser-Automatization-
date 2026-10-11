@@ -250,6 +250,47 @@ export const api = {
     del<{ run_id: string; deleted: boolean }>(`${API_PREFIX}/runs/${runId}`),
   previewScenario: (payload: RunRequest) =>
     post<RunPreviewResponse>(`${API_PREFIX}/runs/preview-scenario`, payload),
+
+  // --- Этап 5: экспорт ----------------------------------------------------
+  exportRunUrl: (
+    runId: string,
+    params: {
+      format?: 'csv' | 'xlsx' | 'json' | 'jsonl' | 'md'
+      delimiter?: ',' | ';' | 'tab'
+      q?: string
+      only_invalid?: boolean
+    } = {},
+  ) => `${API_PREFIX}/runs/${runId}/export${query(params)}`,
+  runSpec: (runId: string) =>
+    request<{ filename: string; markdown: string; run_id: string }>(
+      `${API_PREFIX}/runs/${runId}/spec`,
+    ),
+  scenarioSpec: (scenarioId: string) =>
+    request<{ filename: string; markdown: string; scenario_id: string }>(
+      `${API_PREFIX}/scenarios/${scenarioId}/spec`,
+    ),
+  runDiff: (runId: string, against?: string) =>
+    request<{
+      current_run_id: string
+      previous_run_id: string
+      added: number
+      removed: number
+      changed: number
+      unchanged: number
+      added_items: Array<Record<string, unknown>>
+      removed_items: Array<Record<string, unknown>>
+      changed_items: Array<Record<string, unknown>>
+    }>(`${API_PREFIX}/runs/${runId}/diff${query({ against })}`),
+  runArtifacts: (runId: string) =>
+    request<
+      Array<{
+        id: string
+        kind: string
+        filename: string
+        size_bytes: number | null
+        download_url: string
+      }>
+    >(`${API_PREFIX}/runs/${runId}/artifacts`),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */

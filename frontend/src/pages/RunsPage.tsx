@@ -15,11 +15,19 @@ const STATUS_TONE: Record<RunStatus, 'ok' | 'warn' | 'error' | 'neutral'> = {
   cancelled: 'neutral',
 }
 
-/** Запуски: история, отчёт о полноте и собранные записи. */
+type ExportFormat = 'csv' | 'xlsx' | 'json' | 'jsonl' | 'md'
+type SortKey = string
+
+/** Запуски: история, фильтр, экспорт и сравнение с прошлым запуском. */
 export function RunsPage() {
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [onlyInvalid, setOnlyInvalid] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortAsc, setSortAsc] = useState(true)
+  const [showDiff, setShowDiff] = useState(false)
 
   const runs = useQuery({
     queryKey: queryKeys.runs(),
@@ -33,8 +41,15 @@ export function RunsPage() {
 
   const items = useQuery({
     queryKey: queryKeys.runItems(selectedId ?? ''),
-    queryFn: () => api.runItems(selectedId as string, { limit: 200 }),
+    queryFn: () => api.runItems(selectedId as string, { limit: 1000 }),
     enabled: Boolean(selectedId),
+  })
+
+  const diff = useQuery({
+    queryKey: ['run-diff', selectedId],
+    queryFn: () => api.runDiff(selectedId as string),
+    enabled: Boolean(selectedId) && showDiff,
+    retry: false,
   })
 
   const deleteRun = useMutation({
@@ -56,11 +71,72 @@ export function RunsPage() {
     return Array.from(keys)
   }, [items.data])
 
+  const visibleRows = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    let rows = items.data?.items ?? []
+    if (onlyInvalid) rows = rows.filter((row) => !row.is_valid)
+    if (needle) {
+      rows = rows.filter((row) =>
+        Object.values(row.data).some((value) =>
+          String(value ?? '')
+            .toLowerCase()
+            .includes(needle),
+        ),
+      )
+    }
+    if (sortKey) {
+      const key = sortKey
+      rows = [...rows].sort((left, right) => {
+        const a = left.data[key]
+        const b = right.data[key]
+        if (a === b) return 0
+        if (a === null || a === undefined || a === '') return 1
+        if (b === null || b === undefined || b === '') return -1
+        if (typeof a === 'number' && typeof b === 'number') {
+          return sortAsc ? a - b : b - a
+        }
+        const cmp = String(a).localeCompare(String(b), 'ru')
+        return sortAsc ? cmp : -cmp
+      })
+    }
+    return rows
+  }, [items.data, onlyInvalid, query, sortAsc, sortKey])
+
+  function toggleSort(column: string) {
+    if (sortKey === column) {
+      setSortAsc((value) => !value)
+      return
+    }
+    setSortKey(column)
+    setSortAsc(true)
+  }
+
+  function download(format: ExportFormat) {
+    if (!selectedId) return
+    const url = api.exportRunUrl(selectedId, {
+      format,
+      q: query || undefined,
+      only_invalid: onlyInvalid || undefined,
+    })
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  async function copyMarkdownSpec() {
+    if (!selectedId) return
+    try {
+      const spec = await api.runSpec(selectedId)
+      await navigator.clipboard.writeText(spec.markdown)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err))
+    }
+  }
+
   return (
     <div className="grid">
       <Card
         title="Запуски"
-        subtitle="История выполнения сценариев и собранные данные"
+        subtitle="История выполнения, фильтры, экспорт и сравнение запусков"
         actions={
           <button className="btn" onClick={() => void runs.refetch()} disabled={runs.isFetching}>
             {runs.isFetching ? 'Обновляю…' : 'Обновить'}
@@ -95,7 +171,10 @@ export function RunsPage() {
                 <tr
                   key={run.id}
                   className={selectedId === run.id ? 'table__row--active' : undefined}
-                  onClick={() => setSelectedId(run.id)}
+                  onClick={() => {
+                    setSelectedId(run.id)
+                    setShowDiff(false)
+                  }}
                   style={{ cursor: 'pointer' }}
                 >
                   <td>
@@ -132,7 +211,29 @@ export function RunsPage() {
       {selected ? (
         <Card
           title={`Запуск: ${selected.scenario_name ?? selected.id.slice(0, 8)}`}
-          subtitle={selected.error ?? 'Отчёт о полноте и таблица записей'}
+          subtitle={selected.error ?? 'Таблица результатов, экспорт и diff'}
+          actions={
+            <div className="row-actions">
+              <button className="btn btn--primary" onClick={() => download('xlsx')}>
+                XLSX
+              </button>
+              <button className="btn" onClick={() => download('csv')}>
+                CSV
+              </button>
+              <button className="btn" onClick={() => download('json')}>
+                JSON
+              </button>
+              <button className="btn" onClick={() => download('md')}>
+                MD
+              </button>
+              <button className="btn" onClick={() => void copyMarkdownSpec()}>
+                ТЗ в буфер
+              </button>
+              <button className="btn" onClick={() => setShowDiff((value) => !value)}>
+                {showDiff ? 'Скрыть diff' : 'Сравнить'}
+              </button>
+            </div>
+          }
         >
           <KeyValue
             items={[
@@ -153,6 +254,47 @@ export function RunsPage() {
               ],
             ]}
           />
+
+          <div className="form-row" style={{ marginTop: 14 }}>
+            <input
+              className="input"
+              placeholder="Поиск по значениям…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={onlyInvalid}
+                onChange={(event) => setOnlyInvalid(event.target.checked)}
+              />
+              только с пропусками
+            </label>
+          </div>
+
+          {showDiff ? (
+            <div style={{ marginTop: 12 }}>
+              {diff.isLoading ? <p className="muted">Сравниваю…</p> : null}
+              {diff.isError ? (
+                <p className="muted">
+                  {diff.error instanceof ApiError
+                    ? diff.error.message
+                    : 'Нет предыдущего запуска для сравнения'}
+                </p>
+              ) : null}
+              {diff.data ? (
+                <KeyValue
+                  items={[
+                    ['Добавлено', String(diff.data.added)],
+                    ['Удалено', String(diff.data.removed)],
+                    ['Изменено', String(diff.data.changed)],
+                    ['Без изменений', String(diff.data.unchanged)],
+                    ['Против', diff.data.previous_run_id.slice(0, 10) + '…'],
+                  ]}
+                />
+              ) : null}
+            </div>
+          ) : null}
 
           {selected.report?.fields ? (
             <table className="table" style={{ marginTop: 16 }}>
@@ -182,20 +324,25 @@ export function RunsPage() {
           ) : null}
 
           {items.isLoading ? <p className="muted">Загружаю записи…</p> : null}
-          {items.data && items.data.items.length > 0 ? (
+          {visibleRows.length > 0 ? (
             <div className="table-scroll" style={{ marginTop: 16 }}>
               <table className="table">
                 <thead>
                   <tr>
                     <th>#</th>
                     {columns.map((column) => (
-                      <th key={column}>{column}</th>
+                      <th key={column}>
+                        <button className="btn btn--tiny" onClick={() => toggleSort(column)}>
+                          {column}
+                          {sortKey === column ? (sortAsc ? ' ↑' : ' ↓') : ''}
+                        </button>
+                      </th>
                     ))}
                     <th>Ок</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.data.items.map((item) => (
+                  {visibleRows.map((item) => (
                     <tr key={item.id}>
                       <td>{item.position + 1}</td>
                       {columns.map((column) => (
@@ -210,6 +357,9 @@ export function RunsPage() {
                   ))}
                 </tbody>
               </table>
+              <p className="muted" style={{ marginTop: 8 }}>
+                Показано {visibleRows.length} из {items.data?.total ?? 0}
+              </p>
             </div>
           ) : null}
         </Card>

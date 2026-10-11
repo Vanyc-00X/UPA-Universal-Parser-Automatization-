@@ -49,6 +49,17 @@ export function ScenariosPage() {
     },
   })
 
+  async function copySpec(scenarioId: string, name: string) {
+    try {
+      const spec = await api.scenarioSpec(scenarioId)
+      await navigator.clipboard.writeText(spec.markdown)
+      setNotice(`ТЗ сценария «${name}» скопировано в буфер`)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err))
+    }
+  }
+
   return (
     <div className="grid">
       <Card
@@ -124,6 +135,12 @@ export function ScenariosPage() {
                         <Link className="btn" to="/runs">
                           Запуски
                         </Link>
+                        <button
+                          className="btn"
+                          onClick={() => void copySpec(scenario.id, scenario.name)}
+                        >
+                          ТЗ
+                        </button>
                         <button
                           className="btn"
                           onClick={() => {
