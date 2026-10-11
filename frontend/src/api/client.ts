@@ -430,6 +430,44 @@ export const api = {
     request<TemplateDetail>(`${API_PREFIX}/templates/${templateId}`),
   ensureLlm: (pull = false) =>
     post<EnsureLlmResponse>(`${API_PREFIX}/system/llm/ensure`, { pull }),
+
+  // --- Мониторинг изменений ----------------------------------------------
+  monitorList: () =>
+    request<{
+      items: Array<{
+        scenario_id: string
+        name: string
+        interval: string | null
+        interval_seconds: number | null
+        last_run_at: string | null
+        is_due: boolean
+        is_active: boolean
+      }>
+      intervals: Record<string, number>
+    }>(`${API_PREFIX}/monitor`),
+  monitorSchedule: (scenarioId: string, interval: string | null) =>
+    request<{
+      scenario_id: string
+      name: string
+      interval: string | null
+      interval_seconds: number | null
+      last_run_at: string | null
+      is_due: boolean
+      is_active: boolean
+    }>(`${API_PREFIX}/monitor/scenarios/${scenarioId}/schedule`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval }),
+    }),
+  monitorCheck: (scenarioId: string, live = false) =>
+    post<{ event: Record<string, unknown> }>(
+      `${API_PREFIX}/monitor/scenarios/${scenarioId}/check`,
+      { live },
+    ),
+  monitorEvents: (limit = 50) =>
+    request<{ items: Array<Record<string, unknown>>; total: number }>(
+      `${API_PREFIX}/monitor/events${query({ limit })}`,
+    ),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */
@@ -457,4 +495,6 @@ export const queryKeys = {
   run: (runId: string) => ['run', runId] as const,
   runItems: (runId: string) => ['run-items', runId] as const,
   templates: (kind?: string) => ['templates', kind ?? 'all'] as const,
+  monitor: ['monitor'] as const,
+  monitorEvents: ['monitor', 'events'] as const,
 }

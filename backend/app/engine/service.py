@@ -837,6 +837,7 @@ async def run_scenario(
     snapshot_id: str | None = None,
     fetch_page: PageFetcher | None = None,
     min_coverage: float = validate.DEFAULT_MIN_COVERAGE,
+    trigger: RunTrigger = RunTrigger.MANUAL,
 ) -> RunOutcome:
     """Запускает сохранённый сценарий.
 
@@ -869,6 +870,7 @@ async def run_scenario(
         scenario_version_id=version.id,
         snapshot_id=snapshot_id,
         fetch_page=fetch_page,
+        trigger=trigger,
         min_coverage=min_coverage,
     )
 

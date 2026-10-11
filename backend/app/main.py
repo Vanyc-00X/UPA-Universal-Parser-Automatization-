@@ -36,6 +36,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # существующие таблицы, и приложение стартовало бы на устаревшей базе.
     upgrade_to_head(settings)
     init_engine(settings)
+    from app.monitor import scheduler as monitor_scheduler
+
+    monitor_scheduler.start(settings, poll_seconds=60)
     log.info(
         "app.startup",
         app=settings.app_name,
@@ -46,6 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await monitor_scheduler.stop()
         await dispose_engine()
         log.info("app.shutdown")
 

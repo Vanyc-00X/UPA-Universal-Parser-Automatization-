@@ -9,6 +9,7 @@ import { RunsPage } from './pages/RunsPage'
 import { ScenariosPage } from './pages/ScenariosPage'
 import { SitesPage } from './pages/SitesPage'
 import { TemplatesPage } from './pages/TemplatesPage'
+import { MonitorPage } from './pages/MonitorPage'
 import { WorkflowPage } from './pages/WorkflowPage'
 
 /** Корневой компонент: общий каркас плюс маршруты разделов. */
@@ -23,7 +24,9 @@ export function App() {
         <Route path="/templates" element={<TemplatesPage />} />
         <Route path="/workflow" element={<WorkflowPage />} />
         <Route path="/runs" element={<RunsPage />} />
+        <Route path="/monitor" element={<MonitorPage />} />
         <Route path="/help" element={<HelpPage />} />
+
         <Route path="/roadmap" element={<RoadmapPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

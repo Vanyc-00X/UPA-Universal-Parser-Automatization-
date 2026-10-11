@@ -20,6 +20,7 @@ const NAV: NavItem[] = [
   { to: '/templates', label: 'Шаблоны', stage: '8' },
   { to: '/workflow', label: 'Воркфлоу', stage: '7' },
   { to: '/runs', label: 'Запуски', stage: '6' },
+  { to: '/monitor', label: 'Мониторинг' },
   { to: '/help', label: 'Справка' },
   { to: '/roadmap', label: 'План работ' },
 ]
