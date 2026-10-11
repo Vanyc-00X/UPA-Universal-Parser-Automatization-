@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Запуск UPA: API (FastAPI) + веб-интерфейс (Vite) одной командой.
 
@@ -200,20 +200,15 @@ $chromiumPresent = @(Get-ChildItem $env:PLAYWRIGHT_BROWSERS_PATH -Directory -Fil
 if (-not $chromiumPresent) {
     if ($SkipInstall) {
         Write-Warn 'Chromium не установлен, установка отключена ключом -SkipInstall.'
-        Write-Warn 'Съёмка страниц будет недоступна до: python -m playwright install chromium'
+        Write-Warn 'Съёмка: python scripts/install_chromium.py   или установите Google Chrome / Edge'
     } else {
-        Write-Ok 'Скачиваю Chromium (около 120 МБ, только при первом запуске)'
-        Push-Location $BackendDir
-        try {
-            & $pythonExe -m playwright install chromium
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warn 'Не удалось скачать Chromium. Приложение запустится, но съёмка страниц будет недоступна.'
-                Write-Warn 'Повторите позже: python -m playwright install chromium'
-            } else {
-                Write-Ok 'Chromium установлен'
-            }
-        } finally {
-            Pop-Location
+        Write-Ok 'Ставлю Chromium с зеркалами (около 120 МБ при первом запуске)'
+        & $pythonExe (Join-Path $RepoRoot 'scripts\install_chromium.py') --python $pythonExe
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn 'Chromium не скачался. UPA попробует системный Chrome/Edge при съёмке.'
+            Write-Warn 'Повтор: .\scripts\install-chromium.ps1'
+        } else {
+            Write-Ok 'Браузер для съёмки готов (Chromium или системный Chrome/Edge)'
         }
     }
 } else {

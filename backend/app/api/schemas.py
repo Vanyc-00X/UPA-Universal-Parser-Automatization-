@@ -74,6 +74,18 @@ class LLMStatusResponse(BaseModel):
     detail: str | None = None
 
 
+class BrowserStatusResponse(BaseModel):
+    """Готовность браузера для съёмки и живой записи."""
+
+    ready: bool
+    chromium_installed: bool
+    browsers_path: str
+    system_channels: list[str] = Field(default_factory=list)
+    fallback: str | None = None
+    install_hint: str | None = None
+    headless: bool = True
+
+
 class ErrorBody(BaseModel):
     """Тело ошибки."""
 

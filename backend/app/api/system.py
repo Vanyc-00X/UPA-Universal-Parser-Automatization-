@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from app import __version__
 from app.api import deps
 from app.api.schemas import (
+    BrowserStatusResponse,
     ComponentHealth,
     FeaturesResponse,
     FeatureStatus,
@@ -301,3 +302,15 @@ async def llm_status(request: Request) -> LLMStatusResponse:
     settings = _settings(request)
     data = await deps.check_llm(settings)
     return LLMStatusResponse(**data)
+
+
+@router.get(
+    "/system/browser",
+    response_model=BrowserStatusResponse,
+    summary="Готовность Chromium / Chrome / Edge",
+)
+async def browser_status(request: Request) -> BrowserStatusResponse:
+    from app.crawler.browser_ready import browser_status as probe
+
+    settings = _settings(request)
+    return BrowserStatusResponse(**probe(settings))
