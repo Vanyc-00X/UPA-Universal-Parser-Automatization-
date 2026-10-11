@@ -47,7 +47,6 @@ from app.editor.schema import (
     ScenarioVersionOut,
     SelectStrategy,
 )
-from app.storage.models import Snapshot
 
 router = APIRouter(tags=["editor"])
 
@@ -520,32 +519,22 @@ async def save_as_scenario(
             details={"problems": state.validation.problems},
         )
 
-    snapshot = await db.get(Snapshot, snapshot_id)
-    if snapshot is None:
-        raise ValidationError("Снапшот не найден", details={"snapshot_id": snapshot_id})
-
-    definition = state.draft.model_copy(
-        update={
-            "title": payload.name,
-            "description": payload.description or state.draft.description,
-        }
-    )
-    scenario, version = await scenario_service.save_scenario(
+    saved = await editor.build_scenario(
         db,
-        definition,
+        settings,
+        snapshot_id,
         name=payload.name,
-        site_id=snapshot.site_id,
         description=payload.description,
         change_note=payload.change_note,
         scenario_id=payload.scenario_id,
     )
     return ScenarioSavedResponse(
-        scenario_id=scenario.id,
-        site_id=scenario.site_id,
-        scenario_name=scenario.name,
-        version=version.version,
-        fields=len(definition.fields),
-        definition=definition,
+        scenario_id=saved.scenario.id,
+        site_id=saved.scenario.site_id,
+        scenario_name=saved.scenario.name,
+        version=saved.version.version,
+        fields=len(saved.definition.fields),
+        definition=saved.definition,
     )
 
 

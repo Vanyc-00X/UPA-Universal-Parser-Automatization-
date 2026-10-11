@@ -342,6 +342,20 @@ code {
   border-bottom: none;
 }
 
+.table__row--active td {
+  background: var(--accent-soft);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .kv {
   margin: 0;
   display: grid;

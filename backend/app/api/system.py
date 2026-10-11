@@ -54,8 +54,8 @@ FEATURES: list[FeatureStatus] = [
         key="extraction",
         title="Движок извлечения",
         stage="4",
-        status="planned",
-        description="JSON-API/DOM-стратегии, пагинация, нормализация, валидация",
+        status="in_progress",
+        description="DOM list/single, нормализация, пагинация, отчёт о полноте, API запусков",
     ),
     FeatureStatus(
         key="storage_export",
@@ -128,7 +128,7 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="3",
         title="Визуальный редактор элементов",
-        status="in_progress",
+        status="done",
         items=[
             "инспектор страницы с рамками",
             "проверка селекторов на живом DOM",
@@ -139,8 +139,13 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="4",
         title="Движок извлечения",
-        status="planned",
-        items=["резолвер селекторов", "стратегии json_api/dom_list/llm", "пагинация", "валидация"],
+        status="in_progress",
+        items=[
+            "извлечение list/single из DOM",
+            "нормализация цен, ссылок и дат",
+            "пагинация next_link и url_template",
+            "запуски, записи и отчёт о полноте",
+        ],
     ),
     StageInfo(
         key="5",

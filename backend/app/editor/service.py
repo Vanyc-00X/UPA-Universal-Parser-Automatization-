@@ -401,6 +401,56 @@ async def save_draft(
     return await get_state(session, settings, snapshot_id)
 
 
+@dataclass
+class SavedScenario:
+    """Результат сохранения черновика как сценария."""
+
+    scenario: Any
+    version: Any
+    definition: ScenarioDefinition
+
+
+async def build_scenario(
+    session: AsyncSession,
+    settings: Settings,
+    snapshot_id: str,
+    *,
+    name: str,
+    description: str | None = None,
+    change_note: str | None = None,
+    scenario_id: str | None = None,
+) -> SavedScenario:
+    """Сохраняет текущий черновик как сценарий и его версию.
+
+    Проверка селекторов уже выполнена при чтении состояния, поэтому здесь
+    остаётся только запись. Название и описание подставляются в определение:
+    сценарий должен быть самодостаточным документом.
+    """
+    from app.editor import scenario as scenario_service
+
+    state = await get_state(session, settings, snapshot_id)
+    snapshot = await session.get(Snapshot, snapshot_id)
+    if snapshot is None:
+        raise NotFoundError("Снапшот не найден", details={"snapshot_id": snapshot_id})
+
+    definition = state.draft.model_copy(
+        update={
+            "title": name,
+            "description": description or state.draft.description,
+        }
+    )
+    scenario, version = await scenario_service.save_scenario(
+        session,
+        definition,
+        name=name,
+        site_id=snapshot.site_id,
+        description=description,
+        change_note=change_note,
+        scenario_id=scenario_id,
+    )
+    return SavedScenario(scenario=scenario, version=version, definition=definition)
+
+
 async def reset_draft(session: AsyncSession, settings: Settings, snapshot_id: str) -> EditorState:
     """Откатывает черновик к базовому сценарию."""
     record = await analyze_service.require_element_map(session, snapshot_id)

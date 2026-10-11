@@ -48,6 +48,13 @@ import type {
   ScenarioListResponse,
   ScenarioVersionOut,
 } from './scenarioTypes'
+import type {
+  RunItemsResponse,
+  RunListResponse,
+  RunOut,
+  RunPreviewResponse,
+  RunRequest,
+} from './runTypes'
 
 const API_PREFIX = '/api/v1'
 
@@ -227,6 +234,22 @@ export const api = {
     request<ScenarioListResponse>(`${API_PREFIX}/scenarios${query(params)}`),
   scenarioVersions: (scenarioId: string) =>
     request<ScenarioVersionOut[]>(`${API_PREFIX}/scenarios/${scenarioId}/versions`),
+  deleteScenario: (scenarioId: string) =>
+    del<{ scenario_id: string; deleted: boolean }>(`${API_PREFIX}/scenarios/${scenarioId}`),
+
+  // --- Этап 4: запуски ----------------------------------------------------
+  createRun: (payload: RunRequest) => post<RunOut>(`${API_PREFIX}/runs`, payload),
+  runs: (params: { scenario_id?: string; limit?: number; offset?: number } = {}) =>
+    request<RunListResponse>(`${API_PREFIX}/runs${query(params)}`),
+  run: (runId: string) => request<RunOut>(`${API_PREFIX}/runs/${runId}`),
+  runItems: (
+    runId: string,
+    params: { limit?: number; offset?: number; only_invalid?: boolean } = {},
+  ) => request<RunItemsResponse>(`${API_PREFIX}/runs/${runId}/items${query(params)}`),
+  deleteRun: (runId: string) =>
+    del<{ run_id: string; deleted: boolean }>(`${API_PREFIX}/runs/${runId}`),
+  previewScenario: (payload: RunRequest) =>
+    post<RunPreviewResponse>(`${API_PREFIX}/runs/preview-scenario`, payload),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */
@@ -250,4 +273,7 @@ export const queryKeys = {
   preview: (snapshotId: string) => ['preview', snapshotId] as const,
   scenarios: (siteId?: string) => ['scenarios', siteId ?? 'all'] as const,
   scenarioVersions: (scenarioId: string) => ['scenario-versions', scenarioId] as const,
+  runs: (scenarioId?: string) => ['runs', scenarioId ?? 'all'] as const,
+  run: (runId: string) => ['run', runId] as const,
+  runItems: (runId: string) => ['run-items', runId] as const,
 }
