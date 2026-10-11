@@ -55,6 +55,15 @@ import type {
   RunPreviewResponse,
   RunRequest,
 } from './runTypes'
+import type {
+  ParseCsvResponse,
+  WorkflowDefinition,
+  WorkflowExportResponse,
+  WorkflowOut,
+  WorkflowRunResponse,
+  WorkflowSaveRequest,
+  WorkflowSaveResponse,
+} from './workflowTypes'
 
 const API_PREFIX = '/api/v1'
 
@@ -330,6 +339,47 @@ export const api = {
         details: Record<string, unknown>
       }>
     >(`${API_PREFIX}/runs/${runId}/journal`),
+
+  // --- Этап 7: воркфлоу ввода --------------------------------------------
+  saveWorkflow: (payload: WorkflowSaveRequest) =>
+    post<WorkflowSaveResponse>(`${API_PREFIX}/workflows`, payload),
+  workflow: (scenarioId: string) =>
+    request<WorkflowOut>(`${API_PREFIX}/workflows/${scenarioId}`),
+  workflowDryRun: (
+    scenarioId: string,
+    payload: {
+      snapshot_id: string
+      rows?: Record<string, unknown>[]
+      csv_text?: string
+      persist?: boolean
+    },
+  ) => post<WorkflowRunResponse>(`${API_PREFIX}/workflows/${scenarioId}/dry-run`, payload),
+  workflowLiveRun: (
+    scenarioId: string,
+    payload: {
+      rows?: Record<string, unknown>[]
+      csv_text?: string
+      confirm_dangerous?: boolean
+      persist?: boolean
+    },
+  ) => post<WorkflowRunResponse>(`${API_PREFIX}/workflows/${scenarioId}/run`, payload),
+  workflowPreviewDryRun: (payload: {
+    snapshot_id: string
+    workflow: WorkflowDefinition
+    rows?: Record<string, unknown>[]
+    csv_text?: string
+  }) => post<WorkflowRunResponse>(`${API_PREFIX}/workflows/preview-dry-run`, payload),
+  workflowExportScript: (
+    scenarioId: string,
+    payload: { rows?: Record<string, unknown>[]; csv_text?: string } = {},
+  ) => post<WorkflowExportResponse>(`${API_PREFIX}/workflows/${scenarioId}/export-script`, payload),
+  workflowExportDraft: (payload: {
+    workflow: WorkflowDefinition
+    rows?: Record<string, unknown>[]
+    csv_text?: string
+  }) => post<WorkflowExportResponse>(`${API_PREFIX}/workflows/export-script`, payload),
+  parseWorkflowCsv: (csv_text: string, delimiter = ',') =>
+    post<ParseCsvResponse>(`${API_PREFIX}/workflows/parse-csv`, { csv_text, delimiter }),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */

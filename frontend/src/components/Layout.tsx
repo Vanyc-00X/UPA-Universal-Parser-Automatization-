@@ -14,6 +14,7 @@ const NAV: NavItem[] = [
   { to: '/sites', label: 'Сайты', stage: '1' },
   { to: '/element-map', label: 'Карта элементов', stage: '2' },
   { to: '/scenarios', label: 'Сценарии', stage: '3' },
+  { to: '/workflow', label: 'Воркфлоу', stage: '7' },
   { to: '/runs', label: 'Запуски', stage: '6' },
   { to: '/roadmap', label: 'План работ' },
 ]

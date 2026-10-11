@@ -68,15 +68,15 @@ FEATURES: list[FeatureStatus] = [
         key="self_healing",
         title="Надёжность и self-healing",
         stage="6",
-        status="in_progress",
+        status="done",
         description="Диагностика селекторов, предложение патча, журнал, ретраи, robots.txt",
     ),
     FeatureStatus(
         key="form_fill",
         title="Автоматизация ввода",
         stage="7",
-        status="planned",
-        description="Действия, параметризация, генерация Python-скрипта",
+        status="in_progress",
+        description="Действия, dry-run, CSV-параметры, экспорт Python-скрипта Playwright",
     ),
     FeatureStatus(
         key="packaging",
@@ -161,7 +161,7 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="6",
         title="Надёжность и self-healing",
-        status="in_progress",
+        status="done",
         items=[
             "диагностика сломанных селекторов",
             "предложение патча без автоприменения",
@@ -172,8 +172,13 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="7",
         title="Автоматизация ввода",
-        status="planned",
-        items=["действия", "параметризация из файла", "экспорт в Python-скрипт"],
+        status="in_progress",
+        items=[
+            "действия goto/fill/click/select/assert",
+            "параметризация CSV/JSON и dry-run",
+            "экспорт в Python-скрипт Playwright",
+            "подтверждение опасных отправок",
+        ],
     ),
     StageInfo(
         key="8",
@@ -183,7 +188,7 @@ STAGES: list[StageInfo] = [
     ),
 ]
 
-CURRENT_STAGE = "6"
+CURRENT_STAGE = "7"
 
 
 def _settings(request: Request) -> Settings:
