@@ -5,16 +5,16 @@
 <h1 align="center">UPA — Universal Parser Automatization</h1>
 
 <p align="center">
-  <strong>Локальный конструктор сценариев для сайтов:</strong><br>
-  изучить страницу → сохранить рецепт → собирать данные или заполнять формы пачками.
+  <strong>Local-first scenario builder for websites:</strong><br>
+  learn a page → save a recipe → collect data or fill forms in batches.
 </p>
 
 <p align="center">
-  <a href="#кому-это-нужно">Кому нужно</a> ·
-  <a href="#почему-upa-а-не-ещё-один-парсер">Почему UPA</a> ·
-  <a href="#пример-использования-за-5-минут">Пример за 5 минут</a> ·
-  <a href="#быстрый-старт">Старт</a> ·
-  <a href="docs/disclaimer.md">Дисклеймер</a>
+  <a href="#who-it-is-for">Who it is for</a> ·
+  <a href="#why-upa">Why UPA</a> ·
+  <a href="#five-minute-demo">5-minute demo</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="docs/disclaimer.md">Disclaimer</a>
 </p>
 
 <p align="center">
@@ -28,128 +28,98 @@
 
 ---
 
-## Одной фразой
+## In one sentence
 
-**UPA превращает «я каждый раз руками лазаю по сайту» в переиспользуемый сценарий** — с версиями, отчётом о дырах в данных, самопочинкой селекторов и безопасным dry-run перед отправкой форм.
+**UPA turns “I keep clicking through this site by hand” into a reusable scenario** — with versions, coverage reports, selector self-healing, change monitoring, and a safe dry-run before form submit.
 
-Данные остаются на вашем ПК. ИИ (Ollama) помогает, но **не обязателен**.
-
----
-
-## Кому это нужно
-
-| Вам зайдёт, если… | Вам, скорее всего, не нужно, если… |
-|---|---|
-| Нужно регулярно снимать каталоги, прайсы, вакансии, новости | Нужен разовый `curl` / одноразовый скрипт на 20 строк |
-| Хотите **сценарий как актив**: версии, повторный запуск, экспорт | Ищете облачный SaaS-парсер «под ключ» без локальной установки |
-| Формы нужно заполнять из CSV/Excel на десятки строк | Нужен скрытый обход капчи / антибота «на автомате» |
-| Важны приватность и контроль: локально, без отправки HTML в чужой облачный парсер | Нужен только API-клиент к уже известному JSON endpoint |
-| После смены вёрстки хотите **предложение патча**, а не мёртвый скрипт | Не готовы соблюдать ToS сайтов и отвечать за live-отправки |
-
-> Короткий тест: если вы уже второй раз копируете селекторы в новый скрипт — UPA для вас.
+Your data stays on your machine. Local AI (Ollama) helps with page analysis but is **optional**.
 
 ---
 
-## Почему UPA, а не «ещё один парсер»
+## Who it is for
 
-Большинство инструментов останавливаются на «скачал HTML → вытащил поля».  
-UPA заточен под **жизнь сценария после первой удачи**:
-
-| Проблема | Как решает UPA |
+| You’ll like UPA if… | You probably don’t need it if… |
 |---|---|
-| Скрипт сломался через неделю | Self-healing: предлагает новый селектор, **не применяет молча** |
-| Непонятно, собрали всё или с дырами | Отчёт о полноте по каждому запуску |
-| Нужно и парсить, и заводить данные | Два режима: `collection` (сбор) и `form_fill` (ввод) |
-| Страшно жать «Отправить» на 50 строк | Dry-run по DOM + явное подтверждение опасных действий |
-| Хочется унести автоматизацию без приложения | Экспорт самостоятельного Playwright `.py` |
-| Не хочется облако | Local-first: SQLite + артефакты на диске, ИИ опционален |
+| You regularly scrape catalogs, prices, jobs, news | You need a one-off `curl` / 20-line script |
+| You want a **scenario as an asset**: versions, reruns, export | You want a hosted SaaS scraper with zero install |
+| You fill forms from CSV/Excel for dozens of rows | You need silent CAPTCHA / antibot bypass |
+| Privacy matters: local, no shipping HTML to a third-party scraper | You only need a client for a known JSON API |
+| After a layout change you want a **patch proposal**, not a dead script | You’re not ready to respect site ToS / own live submits |
+
+> Quick test: if you’ve copied the same selectors into a new script twice — UPA is for you.
+
+---
+
+## Why UPA
+
+Most tools stop at “download HTML → extract fields”.  
+UPA is built for **the life of a scenario after the first win**:
+
+| Pain | What UPA does |
+|---|---|
+| Script dies after a week | Self-healing proposes a new selector — **never applies silently** |
+| Unclear if the run is complete | Coverage report on every run |
+| Need both scrape and data entry | `collection` and `form_fill` modes |
+| Scary to hit Submit on 50 rows | DOM dry-run + explicit confirm for dangerous steps |
+| Want automation without the app | Export a standalone Playwright `.py` |
+| Don’t want the cloud | Local-first: SQLite + on-disk artifacts; AI optional |
+| Catalog → product page | Two-level **list → detail** collection |
+| SPA data lives in XHR | Parse **HTML or XHR/JSON** from the snapshot network log |
+| Prices / stock change overnight | **Monitoring** with schedule + run diff |
+| Need data elsewhere | Deliver to **webhook / Google Sheets / PostgreSQL** |
 
 ```text
-URL ──► снапшот (DOM / скрин / сеть)
+URL ──► snapshot (DOM / screenshot / network)
           │
           ▼
-     карта элементов + редактор
+     element map + editor
           │
-          ├─► сценарий сбора ──► запуск ──► CSV / XLSX / JSON / ТЗ.md
+          ├─► collection scenario ──► run ──► CSV / XLSX / JSON / Sheets / webhook / PG
           │                         │
-          │                         └─► healing (propose → confirm)
+          │                         ├─► healing (propose → confirm)
+          │                         └─► monitor (schedule + diff)
           │
-          └─► воркфлоу ввода ◄── CSV/XLSX
+          └─► input workflow ◄── CSV/XLSX / live browser recording
                     │
-                    ├─► dry-run (без отправки)
+                    ├─► dry-run (no submit)
                     └─► live / export .py
 ```
 
 ---
 
-## Пример использования за 5 минут
+## Five-minute demo
 
-Полный разбор: [`examples/DEMO.md`](examples/DEMO.md)
+Full walkthrough: [`examples/DEMO.md`](examples/DEMO.md)
 
-### A) Собрать каталог в таблицу
+### A) Collect a catalog into a table
 
 ```powershell
 .\run.ps1
 ```
 
-1. **Сайты** → URL каталога → «Снять снапшот»  
-2. **Карта элементов** → поля `title`, `price`, `url` → сохранить сценарий  
-3. **Сценарии** → «Запустить» → **Запуски** → экспорт CSV  
+1. **Sites** → catalog URL → “Capture snapshot”  
+2. **Element map** → fields `title`, `price`, `url` → save scenario  
+3. Optional: enable **list → detail** and add product-page fields  
+4. **Scenarios** → Run → **Runs** → export CSV (or deliver to Sheets / webhook / Postgres)
 
-Готовый каркас сценария:
+Starter scenario: [`examples/catalog-scenario.json`](examples/catalog-scenario.json)
 
-```json
-{
-  "url": "https://shop.example.com/catalog",
-  "title": "Каталог товаров",
-  "plan": { "mode": "list", "item_selector": ".product-card" },
-  "pagination": { "kind": "next_link", "selector": "a.pagination__next", "max_pages": 5 },
-  "fields": [
-    { "key": "title", "title": "Название", "selector": ".product-card__title", "required": true },
-    { "key": "price", "title": "Цена", "selector": ".product-card__price" },
-    {
-      "key": "url",
-      "title": "Ссылка",
-      "selector": "a.product-card__link",
-      "strategy": "attribute",
-      "attribute": "href"
-    }
-  ]
-}
-```
-
-Файл: [`examples/catalog-scenario.json`](examples/catalog-scenario.json)
-
-### B) Заполнить форму из CSV (с безопасным прогоном)
+### B) Fill a form from CSV (safe first)
 
 ```csv
 name,email,city
-Иван,ivan@example.com,msk
-Мария,maria@example.com,spb
+Ivan,ivan@example.com,msk
+Maria,maria@example.com,spb
 ```
 
-```json
-{
-  "url": "https://forms.example.com/order",
-  "title": "Форма заявки",
-  "steps": [
-    { "type": "goto", "url": "https://forms.example.com/order" },
-    { "type": "fill", "selector": "#field-name", "value": "{{name}}" },
-    { "type": "fill", "selector": "#field-email", "value": "{{email}}" },
-    { "type": "select", "selector": "#field-city", "value": "{{city}}" },
-    { "type": "click", "selector": "#btn-submit", "confirm_required": true }
-  ]
-}
-```
+1. **Workflow** → **Record in browser** (or paste JSON)  
+2. Load CSV → **Dry-run** (nothing is submitted)  
+3. If needed → **Live** with confirm checkbox  
+4. **Export .py** — same scenario without UPA  
 
-1. **Воркфлоу** → вставьте шаги / запись JSON  
-2. CSV → **Dry-run** (форма не уходит)  
-3. При необходимости → **Live** с галочкой подтверждения  
-4. **Экспорт .py** — тот же сценарий без UPA  
+Files: [`examples/form-workflow.json`](examples/form-workflow.json) · [`examples/params-form.csv`](examples/params-form.csv)
 
-Файлы: [`examples/form-workflow.json`](examples/form-workflow.json) · [`examples/params-form.csv`](examples/params-form.csv)
-
-### C) Через API (для автоматизации)
+### C) Via API
 
 ```http
 POST /api/v1/snapshots
@@ -158,17 +128,20 @@ POST /api/v1/snapshots
 POST /api/v1/runs
 { "scenario_id": "<id>", "min_coverage": 0.9 }
 
-POST /api/v1/workflows/{id}/dry-run
-{ "snapshot_id": "<id>", "csv_text": "name,email,city\n..." }
+POST /api/v1/runs/{run_id}/deliver
+{ "kind": "webhook", "target": "https://hooks.example.com/upa" }
+
+POST /api/v1/workflows/recording/start
+{ "url": "https://forms.example.com/order", "headed": true }
 ```
 
-OpenAPI после запуска: http://127.0.0.1:8000/docs
+OpenAPI after start: http://127.0.0.1:8000/docs
 
 ---
 
-## Быстрый старт
+## Quick start
 
-**Windows (рекомендуется):**
+**Windows (recommended):**
 
 ```powershell
 git clone https://github.com/Vanyc-00X/UPA-Universal-Parser-Automatization-.git
@@ -176,24 +149,33 @@ cd UPA-Universal-Parser-Automatization-
 .\run.ps1
 ```
 
-Или двойной клик по [`launch.cmd`](launch.cmd). Ярлык на рабочий стол:
+Or double-click [`launch.cmd`](launch.cmd). Desktop shortcut:
 
 ```powershell
 .\scripts\create-shortcut.ps1
 ```
 
-| Что | Адрес |
+| What | URL |
 |---|---|
-| Веб-интерфейс | http://127.0.0.1:5173 |
+| Web UI | http://127.0.0.1:5173 |
 | API | http://127.0.0.1:8000 |
-| Документация API | http://127.0.0.1:8000/docs |
+| API docs | http://127.0.0.1:8000/docs |
 
-**Без ИИ всё работает.** Ollama усиливает анализ страниц:
+**Works without AI.** Ollama improves page analysis:
 
 ```powershell
 .\run.ps1 -PullModel
-# или в UI: Обзор → «Загрузить модель»
 ```
+
+**Browser install (mirrors + Chrome/Edge fallback):**
+
+```powershell
+.\scripts\install-chromium.ps1
+# or
+python scripts/install_chromium.py
+```
+
+If Playwright Chromium cannot download (CDN / corporate network), UPA automatically tries system **Chrome** or **Edge**. Status: `GET /api/v1/system/browser`.
 
 **Docker (API):**
 
@@ -201,59 +183,64 @@ cd UPA-Universal-Parser-Automatization-
 docker compose up --build
 ```
 
-Подробнее: [docs/quickstart.md](docs/quickstart.md)
+More detail: [docs/quickstart.md](docs/quickstart.md)
 
 ---
 
-## Что внутри
+## Feature highlights
 
-| Возможность | Зачем вам |
+| Feature | Why it matters |
 |---|---|
-| Снапшот Playwright | DOM, скрин, сеть, storage state — воспроизводимая база |
-| Карта элементов + редактор | Видно, что именно парсим, до первого запуска |
-| Версии сценариев | Правка вёрстки ≠ потеря работы |
-| Отчёт о полноте | Сразу видно дыры в обязательных полях |
-| Self-healing | Предложение патча селекторов без автоприменения |
-| Воркфлоу + CSV/XLSX | «500 строк — заведи на сайте» |
-| Dry-run / confirm | Меньше случайных отправок и платежей |
-| Экспорт Playwright | Сценарий живёт отдельно от UPA |
-| Шаблоны | Каталог, форма, статья — старт не с нуля |
+| Playwright snapshot | DOM, screenshot, network, storage — reproducible base |
+| HTML or XHR/JSON source | SPAs often expose the real data in network JSON |
+| List → detail | Catalog fields + product-page fields in one run |
+| Element map + editor | See what you parse before the first run |
+| Scenario versions | Layout change ≠ lost work |
+| Coverage report | Spot missing required fields immediately |
+| Self-healing | Selector patch proposals, never silent apply |
+| Live action recording | Record clicks/fills in a real browser window |
+| Workflow + CSV/XLSX | “500 rows — create them on the site” |
+| Dry-run / confirm | Fewer accidental submits and payments |
+| Change monitoring | Scheduled reruns + diff vs previous run |
+| Deliver destinations | Webhook, Google Sheets, PostgreSQL |
+| Playwright export | Scenario lives outside UPA |
+| Templates | Catalog, form, article — not from zero |
 
-Шаблоны в UI (**Шаблоны**) и `GET /api/v1/templates`. Примеры в [`examples/`](examples/).
+Templates live in the UI (**Templates**) and `GET /api/v1/templates`. Examples in [`examples/`](examples/).
 
 ---
 
-## Документация
+## Documentation
 
-| Документ | О чём |
+| Doc | About |
 |---|---|
-| [Быстрый старт](docs/quickstart.md) | Установка и первый сценарий |
-| [Сценарии и воркфлоу](docs/scenarios.md) | Сбор, ввод, запись, loop/if |
-| [Демо](examples/DEMO.md) | Пошаговый пример «как пользоваться» |
-| [FAQ: блокировки](docs/faq-blocking.md) | 403, капча, robots, healing |
-| [Ретенция данных](docs/data-retention.md) | Что хранится локально |
-| [Дисклеймер](docs/disclaimer.md) | ToS и ответственность |
-| [PLAN.md](PLAN.md) | Этапы разработки 0–8 |
+| [Quick start](docs/quickstart.md) | Install and first scenario |
+| [Scenarios & workflows](docs/scenarios.md) | Collection, input, recording, loop/if |
+| [Demo](examples/DEMO.md) | Step-by-step “how to use” |
+| [FAQ: blocking](docs/faq-blocking.md) | 403, CAPTCHA, robots, healing |
+| [Data retention](docs/data-retention.md) | What is stored locally |
+| [Disclaimer](docs/disclaimer.md) | ToS and responsibility |
+| [PLAN.md](PLAN.md) | Development stages 0–8 |
+
+> Some docs are still in Russian; the product UI and this README are aimed at a global audience.
 
 ---
 
-## Стек
+## Stack
 
-`Python` · `FastAPI` · `Playwright` · `SQLite` · `React` · опционально `Ollama`
+`Python` · `FastAPI` · `Playwright` · `SQLite` · `React` · optional `Ollama`
 
 ---
 
-## Дисклеймер
+## Disclaimer
 
-UPA — инструмент для **осознанной** автоматизации. Соблюдайте Terms of Service сайтов,
-robots.txt и закон. Live-воркфлоу может отправлять формы и инициировать заказы/платежи —
-подтверждение опасных шагов есть, но ответственность за запуск на вас.
+UPA is for **intentional** automation. Respect site Terms of Service, robots.txt, and the law. Live workflows can submit forms and trigger orders/payments — dangerous steps require confirmation, but you own the run.
 
-Подробнее: [docs/disclaimer.md](docs/disclaimer.md)
+Details: [docs/disclaimer.md](docs/disclaimer.md)
 
 ---
 
 <p align="center">
-  <sub>Сделано как local-first альтернатива одноразовым парсерам.<br>
-  Если сценарий должен жить дольше одной недели — вам сюда.</sub>
+  <sub>Built as a local-first alternative to throwaway scrapers.<br>
+  If a scenario should outlive one week — you are in the right place.</sub>
 </p>
