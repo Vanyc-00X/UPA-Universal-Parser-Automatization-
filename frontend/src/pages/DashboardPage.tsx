@@ -274,27 +274,32 @@ export function DashboardPage() {
             {llmNotice ? <p className="muted">{llmNotice}</p> : null}
 
             <div className="form-grid form-grid--llm" style={{ marginTop: 12 }}>
-              <label className="field form-grid__full">
+              <div className="field form-grid__full">
                 <span>Провайдер</span>
-                <select
-                  className="input input--select"
-                  value={providerOptions.some((item) => item.id === provider) ? provider : 'ollama'}
-                  onChange={(event) => {
-                    const next = event.target.value
-                    setProvider(next)
-                    const preset = providerOptions.find((item) => item.id === next)
-                    if (preset?.default_model) setModel(preset.default_model)
-                    if (preset?.default_base_url) setBaseUrl(preset.default_base_url)
-                    else if (next === 'openai_compatible') setBaseUrl('')
-                  }}
-                >
-                  {providerOptions.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <div className="provider-chooser" role="listbox" aria-label="Провайдер ИИ">
+                  {providerOptions.map((preset) => {
+                    const active = provider === preset.id
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        className={`provider-chooser__btn${active ? ' provider-chooser__btn--active' : ''}`}
+                        onClick={() => {
+                          setProvider(preset.id)
+                          if (preset.default_model) setModel(preset.default_model)
+                          if (preset.default_base_url) setBaseUrl(preset.default_base_url)
+                          else if (preset.id === 'openai_compatible') setBaseUrl('')
+                        }}
+                      >
+                        <strong>{preset.label}</strong>
+                        <span>{preset.description}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
               {provider !== 'none' ? (
                 <label className="field">
                   <span>Модель</span>

@@ -315,6 +315,50 @@ select.input,
   line-height: 1.3;
 }
 
+.provider-chooser {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.provider-chooser__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  min-height: 58px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.provider-chooser__btn strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.provider-chooser__btn span {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.provider-chooser__btn:hover {
+  border-color: var(--accent);
+}
+
+.provider-chooser__btn--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .input:disabled {
   opacity: 0.5;
 }
