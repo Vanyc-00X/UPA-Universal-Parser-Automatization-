@@ -167,7 +167,8 @@ code {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+  /* visible: иначе native <select> на Windows иногда рисуется «полоской» */
+  overflow: visible;
 }
 
 .card__head {
@@ -300,6 +301,18 @@ code {
   font-family: inherit;
   font-size: 13px;
   min-width: 0;
+  min-height: 38px;
+  box-sizing: border-box;
+}
+
+select.input,
+.input--select {
+  display: block;
+  width: 100%;
+  appearance: auto;
+  -webkit-appearance: menulist;
+  cursor: pointer;
+  line-height: 1.3;
 }
 
 .input:disabled {

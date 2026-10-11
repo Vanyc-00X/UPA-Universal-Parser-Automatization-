@@ -18,6 +18,73 @@ const STATUS_TONE: Record<string, 'ok' | 'warn' | 'error' | 'neutral'> = {
   skipped: 'neutral',
 }
 
+/** Локальный список — select не должен ждать /system/llm/config (иначе схлопывается). */
+const LLM_PROVIDER_OPTIONS: Array<{
+  id: string
+  label: string
+  description: string
+  needs_key: boolean
+  default_base_url: string
+  default_model: string
+}> = [
+  {
+    id: 'none',
+    label: 'Без ИИ',
+    description: 'Только эвристики',
+    needs_key: false,
+    default_base_url: '',
+    default_model: '',
+  },
+  {
+    id: 'ollama',
+    label: 'Ollama',
+    description: 'Локальная Ollama',
+    needs_key: false,
+    default_base_url: 'http://127.0.0.1:11434',
+    default_model: 'qwen2.5:7b',
+  },
+  {
+    id: 'llamacpp',
+    label: 'llama.cpp',
+    description: 'Сервер llama.cpp (/v1)',
+    needs_key: false,
+    default_base_url: 'http://127.0.0.1:8080/v1',
+    default_model: 'local',
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    description: 'api.openai.com',
+    needs_key: true,
+    default_base_url: 'https://api.openai.com/v1',
+    default_model: 'gpt-4o-mini',
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    description: 'Много моделей, один ключ',
+    needs_key: true,
+    default_base_url: 'https://openrouter.ai/api/v1',
+    default_model: 'openai/gpt-4o-mini',
+  },
+  {
+    id: 'grok',
+    label: 'xAI Grok',
+    description: 'api.x.ai',
+    needs_key: true,
+    default_base_url: 'https://api.x.ai/v1',
+    default_model: 'grok-2-latest',
+  },
+  {
+    id: 'openai_compatible',
+    label: 'Свой OpenAI-compatible',
+    description: 'Любой /v1/chat/completions',
+    needs_key: true,
+    default_base_url: '',
+    default_model: '',
+  },
+]
+
 /** Главный экран: состояние подсистем и готовность этапов. */
 export function DashboardPage() {
   const queryClient = useQueryClient()
@@ -98,7 +165,18 @@ export function DashboardPage() {
     },
   })
 
-  const selectedPreset = llmConfig.data?.presets.find((item) => item.id === provider)
+  const providerOptions =
+    llmConfig.data?.presets && llmConfig.data.presets.length > 0
+      ? llmConfig.data.presets.map((preset) => ({
+          id: preset.id,
+          label: preset.label,
+          description: preset.description,
+          needs_key: preset.needs_key,
+          default_base_url: preset.default_base_url ?? '',
+          default_model: preset.default_model ?? '',
+        }))
+      : LLM_PROVIDER_OPTIONS
+  const selectedPreset = providerOptions.find((item) => item.id === provider)
   const needsKey = Boolean(selectedPreset?.needs_key)
   const showBaseUrl =
     provider === 'ollama' ||
@@ -195,24 +273,22 @@ export function DashboardPage() {
             {llmError ? <p className="error-text">{llmError}</p> : null}
             {llmNotice ? <p className="muted">{llmNotice}</p> : null}
 
-            <div className="form-grid" style={{ marginTop: 12 }}>
-              <label className="field">
+            <div className="form-grid form-grid--llm" style={{ marginTop: 12 }}>
+              <label className="field form-grid__full">
                 <span>Провайдер</span>
                 <select
-                  className="input"
-                  value={provider}
+                  className="input input--select"
+                  value={providerOptions.some((item) => item.id === provider) ? provider : 'ollama'}
                   onChange={(event) => {
                     const next = event.target.value
                     setProvider(next)
-                    const preset = llmConfig.data?.presets.find((item) => item.id === next)
+                    const preset = providerOptions.find((item) => item.id === next)
                     if (preset?.default_model) setModel(preset.default_model)
                     if (preset?.default_base_url) setBaseUrl(preset.default_base_url)
-                    else if (next !== 'openai_compatible' && next !== 'ollama' && next !== 'llamacpp') {
-                      setBaseUrl('')
-                    }
+                    else if (next === 'openai_compatible') setBaseUrl('')
                   }}
                 >
-                  {(llmConfig.data?.presets ?? []).map((preset) => (
+                  {providerOptions.map((preset) => (
                     <option key={preset.id} value={preset.id}>
                       {preset.label}
                     </option>
