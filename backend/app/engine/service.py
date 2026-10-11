@@ -34,7 +34,7 @@ from app.core.logging import get_logger
 from app.crawler import service as crawl_service
 from app.crawler import store
 from app.editor import scenario as scenario_service
-from app.editor.schema import PaginationKind, ScenarioDefinition
+from app.editor.schema import ExtractionPlan, FieldSpec, PaginationKind, ScenarioDefinition
 from app.engine import extractor, paginate, validate
 from app.healing.journal import RunJournal
 from app.healing.retry import with_retries
@@ -430,7 +430,20 @@ async def run_definition(
         current_url = next_url
         page_number += 1
 
+    # --- Список → карточка --------------------------------------------------
+    if definition.detail.enabled and definition.detail.fields and records:
+        detail_attempts = await _follow_detail_pages(
+            session,
+            settings,
+            records,
+            definition,
+            fetch_page=fetch_page,
+            journal=journal,
+        )
+        fetch_attempts.extend(detail_attempts)
+
     # --- Сохранение и отчёт -------------------------------------------------
+    report_definition = _definition_for_report(definition)
     result_for_report = extractor.ExtractionResult(
         records=records,
         mode=definition.plan.mode,
@@ -438,7 +451,7 @@ async def run_definition(
     )
     report = validate.build_report(
         result_for_report,
-        definition,
+        report_definition,
         base_url=base_url,
         min_coverage=min_coverage,
     )
@@ -556,6 +569,121 @@ async def _html_from_snapshots(session: AsyncSession, settings: Settings, url: s
             if html is not None:
                 return html
     return None
+
+
+def _definition_for_report(definition: ScenarioDefinition) -> ScenarioDefinition:
+    """Сценарий с объединёнными полями списка и карточки — для отчёта о полноте."""
+    if not definition.detail.enabled or not definition.detail.fields:
+        return definition
+    return definition.model_copy(
+        update={
+            "fields": list(definition.fields) + list(definition.detail.fields),
+            "detail": definition.detail.model_copy(update={"enabled": False, "fields": []}),
+        }
+    )
+
+
+def _detail_mini_definition(
+    definition: ScenarioDefinition, fields: list[FieldSpec]
+) -> ScenarioDefinition:
+    """Одностраничный сценарий только с полями карточки."""
+    return definition.model_copy(
+        update={
+            "plan": ExtractionPlan(mode="single"),
+            "fields": fields,
+            "detail": definition.detail.model_copy(update={"enabled": False, "fields": []}),
+            "pagination": definition.pagination.model_copy(update={"kind": PaginationKind.NONE}),
+        }
+    )
+
+
+async def _follow_detail_pages(
+    session: AsyncSession,
+    settings: Settings,
+    records: list[extractor.ExtractedRecord],
+    definition: ScenarioDefinition,
+    *,
+    fetch_page: PageFetcher | None,
+    journal: RunJournal,
+) -> list[dict[str, Any]]:
+    """Догружает страницы карточек и дописывает поля в записи списка."""
+    detail = definition.detail
+    link_field = detail.link_field
+    mini = _detail_mini_definition(definition, detail.fields)
+    attempts: list[dict[str, Any]] = []
+    followed = 0
+    seen_urls: set[str] = set()
+
+    journal.info(
+        "detail",
+        "переход в карточки",
+        link_field=link_field,
+        detail_fields=len(detail.fields),
+        max_follows=detail.max_follows,
+    )
+
+    for record in records:
+        if followed >= detail.max_follows:
+            journal.warn("detail", f"достигнут предел переходов ({detail.max_follows})")
+            break
+
+        raw_link = record.values.get(link_field)
+        if raw_link in (None, ""):
+            record.problems[f"detail:{link_field}"] = "нет ссылки на карточку"
+            continue
+        detail_url = str(raw_link).strip()
+        if detail_url in seen_urls:
+            continue
+        seen_urls.add(detail_url)
+
+        html: str | None = None
+        if fetch_page is not None:
+            html, problem, page_attempts = await with_retries(
+                lambda url=detail_url: fetch_page(url),
+                max_attempts=settings.fetch_max_retries,
+                backoff_ms=settings.fetch_retry_backoff_ms,
+            )
+            attempts.extend(page_attempts)
+            if html is None:
+                record.problems["detail"] = problem or "карточка не получена"
+                journal.warn("detail_fetch", record.problems["detail"], url=detail_url)
+                continue
+        else:
+            html = await _html_from_snapshots(session, settings, detail_url)
+            if html is None and detail.snapshot_id:
+                # Для предпросмотра/офлайн: один пример карточки на все записи.
+                html, _ = await _snapshot_html(session, settings, detail.snapshot_id)
+            if html is None:
+                record.problems["detail"] = (
+                    "карточка недоступна: включите live или снимите снапшот карточки"
+                )
+                continue
+
+        document = parse(html)
+        detail_result = extractor.extract_page(document, mini, base_url=detail_url)
+        if detail_result.errors:
+            record.problems["detail"] = "; ".join(detail_result.errors)
+            continue
+        if not detail_result.records:
+            record.problems["detail"] = "на карточке ничего не собрано"
+            continue
+
+        detail_record = detail_result.records[0]
+        for key, value in detail_record.values.items():
+            record.values[key] = value
+            record.raws[key] = detail_record.raws.get(key)
+            record.selectors_used[key] = detail_record.selectors_used.get(key, "")
+            record.used_fallback[key] = detail_record.used_fallback.get(key, False)
+            if key in detail_record.problems:
+                record.problems[key] = detail_record.problems[key]
+        record.values["_detail_url"] = detail_url
+        followed += 1
+
+        if detail.delay_ms:
+            await _sleep(detail.delay_ms / 1000)
+
+    journal.info("detail", f"обогащено карточками: {followed}")
+    return attempts
 
 
 def _record_key(record: extractor.ExtractedRecord, definition: ScenarioDefinition) -> str:
@@ -801,14 +929,25 @@ async def preview_definition(
 
     document = parse(html)
     result = extractor.extract_page(document, definition, base_url=base_url, limit=limit)
-    report = validate.build_report(result, definition, base_url=base_url)
+    if definition.detail.enabled and definition.detail.fields and result.records:
+        await _follow_detail_pages(
+            session,
+            settings,
+            result.records,
+            definition,
+            fetch_page=None,
+            journal=RunJournal(),
+        )
+    report_definition = _definition_for_report(definition)
+    report = validate.build_report(result, report_definition, base_url=base_url)
 
     return {
         "records": [record.as_dict() for record in result.records],
-        "extraction": result.as_dict(definition),
+        "extraction": result.as_dict(report_definition),
         "report": report.as_dict(),
         "report_text": validate.describe_report(report),
         "source": "html",
+        "detail": definition.detail.enabled,
     }
 
 

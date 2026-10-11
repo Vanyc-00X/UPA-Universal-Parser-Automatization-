@@ -14,7 +14,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SelectStrategy(str, Enum):
@@ -114,6 +114,35 @@ class FieldSpec(BaseModel):
         return value
 
 
+class DetailSpec(BaseModel):
+    """Двухуровневый сбор: список → карточка (детальная страница)."""
+
+    enabled: bool = False
+    link_field: str = Field(
+        "url",
+        description="Поле списка со ссылкой на карточку (обычно url / href)",
+    )
+    snapshot_id: str | None = Field(
+        None,
+        description="Снапшот примера карточки для проверки селекторов в редакторе",
+    )
+    fields: list[FieldSpec] = Field(
+        default_factory=list,
+        description="Поля, которые снимаются уже со страницы карточки",
+    )
+    max_follows: int = Field(500, ge=1, le=5000, description="Максимум переходов в карточки")
+    delay_ms: int = Field(700, ge=0, le=60_000, description="Пауза между карточками")
+
+    @field_validator("fields")
+    @classmethod
+    def _check_detail_fields(cls, value: list[FieldSpec]) -> list[FieldSpec]:
+        keys = [field.key for field in value]
+        duplicates = {key for key in keys if keys.count(key) > 1}
+        if duplicates:
+            raise ValueError(f"повторяющиеся имена полей карточки: {sorted(duplicates)}")
+        return value
+
+
 class ScenarioDefinition(BaseModel):
     """Полное описание сценария — то, что хранится в версии."""
 
@@ -123,6 +152,7 @@ class ScenarioDefinition(BaseModel):
     description: str | None = None
     plan: ExtractionPlan = Field(default_factory=ExtractionPlan)
     pagination: PaginationSpec = Field(default_factory=PaginationSpec)
+    detail: DetailSpec = Field(default_factory=DetailSpec)
     fields: list[FieldSpec] = Field(default_factory=list)
     # Служебное: какие ограничения и допущения известны.
     limits: dict[str, Any] = Field(default_factory=dict)
@@ -137,9 +167,27 @@ class ScenarioDefinition(BaseModel):
             raise ValueError(f"повторяющиеся имена полей: {sorted(duplicates)}")
         return value
 
+    @model_validator(mode="after")
+    def _check_detail_overlap(self) -> ScenarioDefinition:
+        if self.detail.enabled and self.detail.fields:
+            list_keys = {field.key for field in self.fields}
+            overlap = list_keys & {field.key for field in self.detail.fields}
+            if overlap:
+                raise ValueError(
+                    f"поля списка и карточки пересекаются: {sorted(overlap)}"
+                )
+        return self
+
     @property
     def required_fields(self) -> list[FieldSpec]:
         return [field for field in self.fields if field.required]
+
+    @property
+    def all_fields(self) -> list[FieldSpec]:
+        """Поля списка плюс поля карточки (если двухуровневый сбор включён)."""
+        if self.detail.enabled and self.detail.fields:
+            return list(self.fields) + list(self.detail.fields)
+        return list(self.fields)
 
     def summary(self) -> dict[str, Any]:
         """Краткая сводка для списков и логов."""
@@ -148,9 +196,11 @@ class ScenarioDefinition(BaseModel):
             "url": self.url,
             "mode": self.plan.mode,
             "fields": len(self.fields),
+            "detail_fields": len(self.detail.fields) if self.detail.enabled else 0,
             "required": len(self.required_fields),
             "pagination": self.pagination.kind.value,
             "max_pages": self.pagination.max_pages,
+            "detail": self.detail.enabled,
         }
 
 

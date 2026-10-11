@@ -433,10 +433,12 @@ async def update_plan(
         plan_data["item_selector"] = None
 
     pagination: PaginationSpec = payload.pagination or draft.pagination
+    detail = payload.detail if payload.detail is not None else draft.detail
     updated = draft.model_copy(
         update={
             "plan": ExtractionPlan.model_validate(plan_data),
             "pagination": pagination,
+            "detail": detail,
         }
     )
     result = await editor.save_draft(db, settings, snapshot_id, updated)

@@ -604,6 +604,23 @@ def validate_definition(
             )
         # api_url необязателен: UPA сама выберет самый богатый JSON из network.
 
+    if definition.detail.enabled:
+        if not definition.detail.fields:
+            problems.append(
+                "Список → карточка включён, но поля карточки не заданы"
+            )
+        link_keys = {field.key for field in definition.fields}
+        if definition.detail.link_field not in link_keys:
+            problems.append(
+                f"Поле ссылки на карточку «{definition.detail.link_field}» "
+                "должно быть среди полей списка (обычно url)"
+            )
+        overlap = link_keys & {field.key for field in definition.detail.fields}
+        if overlap:
+            problems.append(
+                f"Имена полей списка и карточки пересекаются: {sorted(overlap)}"
+            )
+
     if definition.pagination.kind is not PaginationKind.NONE:
         pagination = definition.pagination
         if pagination.kind is PaginationKind.NEXT_LINK and not pagination.selector:

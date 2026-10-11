@@ -36,6 +36,15 @@ export interface PaginationSpec {
   delay_ms: number
 }
 
+export interface DetailSpec {
+  enabled: boolean
+  link_field: string
+  snapshot_id: string | null
+  fields: FieldSpec[]
+  max_follows: number
+  delay_ms: number
+}
+
 export interface ScenarioDefinition {
   url: string
   snapshot_id: string | null
@@ -43,6 +52,7 @@ export interface ScenarioDefinition {
   description: string | null
   plan: ExtractionPlan
   pagination: PaginationSpec
+  detail: DetailSpec
   fields: FieldSpec[]
   limits: Record<string, unknown>
   created_from: string

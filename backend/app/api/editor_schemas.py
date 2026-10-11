@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.editor.schema import (
+    DetailSpec,
     FieldSpec,
     PaginationSpec,
     ScenarioDefinition,
@@ -151,7 +152,7 @@ class FieldOrderRequest(BaseModel):
 
 
 class PlanUpdateRequest(BaseModel):
-    """Изменение плана извлечения и пагинации."""
+    """Изменение плана извлечения, пагинации и карточки."""
 
     plan_mode: Literal["list", "single", "api", "llm"] | None = None
     container_selector: str | None = None
@@ -159,6 +160,7 @@ class PlanUpdateRequest(BaseModel):
     api_url: str | None = None
     records_path: str | None = None
     pagination: PaginationSpec | None = None
+    detail: DetailSpec | None = None
 
 
 class SuggestKeyResponse(BaseModel):
