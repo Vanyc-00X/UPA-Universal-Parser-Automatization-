@@ -118,8 +118,30 @@ export function DashboardPage() {
     }
   }, [llmConfig.data])
 
+  function formatLlmApiError(err: unknown): string {
+    if (!(err instanceof ApiError)) return String(err)
+    if (err.status === 404) {
+      return 'API не знает этот маршрут (устаревший процесс). Перезапустите .\run.ps1 и обновите страницу.'
+    }
+    return err.message
+  }
+
   const ensureLlm = useMutation({
-    mutationFn: (pull: boolean) => api.ensureLlm(pull),
+    mutationFn: async (pull: boolean) => {
+      if (provider === 'none') {
+        return {
+          provider: 'none',
+          available: false,
+          model: null,
+          models: [] as string[],
+          cloud_fallback_enabled: false,
+          detail: 'ИИ отключён — используются только эвристики',
+          pulled: false,
+          action: 'disabled',
+        }
+      }
+      return api.ensureLlm(pull)
+    },
     onSuccess: (result) => {
       setLlmNotice(result.detail)
       setLlmError(null)
@@ -127,7 +149,7 @@ export function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.health })
     },
     onError: (err: unknown) => {
-      setLlmError(err instanceof ApiError ? err.message : String(err))
+      setLlmError(formatLlmApiError(err))
     },
   })
 
@@ -152,16 +174,21 @@ export function DashboardPage() {
       }
       return api.updateLlmConfig(payload)
     },
-    onSuccess: () => {
+    onSuccess: (cfg) => {
       setApiKey('')
-      setLlmNotice('Настройки ИИ сохранены')
+      setProvider(cfg.provider)
+      setLlmNotice(
+        cfg.provider === 'none'
+          ? 'ИИ отключён. Анализ страниц — эвристиками и вручную.'
+          : 'Настройки ИИ сохранены',
+      )
       setLlmError(null)
       void queryClient.invalidateQueries({ queryKey: queryKeys.llm })
       void queryClient.invalidateQueries({ queryKey: queryKeys.llmConfig })
       void queryClient.invalidateQueries({ queryKey: queryKeys.health })
     },
     onError: (err: unknown) => {
-      setLlmError(err instanceof ApiError ? err.message : String(err))
+      setLlmError(formatLlmApiError(err))
     },
   })
 
