@@ -37,7 +37,7 @@ async def test_system_info_reports_current_stage(client: httpx.AsyncClient) -> N
     assert response.status_code == 200
     payload = response.json()
     assert payload["app"] == "UPA"
-    assert payload["stage"] == "5"
+    assert payload["stage"] == "6"
     assert "scaffold" in payload["implemented"]
     assert payload["database_path"] is not None
     assert payload["browser"]["dom_max_tokens"] > 0
@@ -62,7 +62,7 @@ async def test_roadmap_has_nine_stages(client: httpx.AsyncClient) -> None:
     payload = response.json()
     assert len(payload["stages"]) == 9
     assert payload["stages"][0]["key"] == "0"
-    assert payload["current_stage"] == "5"
+    assert payload["current_stage"] == "6"
 
 
 async def test_llm_status_reports_disabled_provider(client: httpx.AsyncClient) -> None:

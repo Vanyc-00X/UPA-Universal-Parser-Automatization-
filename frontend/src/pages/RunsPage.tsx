@@ -28,6 +28,9 @@ export function RunsPage() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortAsc, setSortAsc] = useState(true)
   const [showDiff, setShowDiff] = useState(false)
+  const [showJournal, setShowJournal] = useState(false)
+  const [showHeal, setShowHeal] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const runs = useQuery({
     queryKey: queryKeys.runs(),
@@ -50,6 +53,36 @@ export function RunsPage() {
     queryFn: () => api.runDiff(selectedId as string),
     enabled: Boolean(selectedId) && showDiff,
     retry: false,
+  })
+
+  const journal = useQuery({
+    queryKey: ['run-journal', selectedId],
+    queryFn: () => api.runJournal(selectedId as string),
+    enabled: Boolean(selectedId) && showJournal,
+  })
+
+  const heal = useQuery({
+    queryKey: ['run-heal', selectedId],
+    queryFn: () => api.runHeal(selectedId as string, true),
+    enabled: Boolean(selectedId) && showHeal,
+    retry: false,
+  })
+
+  const applyHeal = useMutation({
+    mutationFn: () =>
+      api.applyHeal(selectedId as string, {
+        change_note: 'Self-healing из интерфейса запусков',
+      }),
+    onSuccess: (result) => {
+      setNotice(
+        `Патч применён: версия сценария v${result.version}. Запустите сценарий снова.`,
+      )
+      void queryClient.invalidateQueries({ queryKey: queryKeys.scenarios() })
+      void queryClient.invalidateQueries({ queryKey: ['run-heal', selectedId] })
+    },
+    onError: (err: unknown) => {
+      setError(err instanceof ApiError ? err.message : String(err))
+    },
   })
 
   const deleteRun = useMutation({
@@ -144,6 +177,7 @@ export function RunsPage() {
         }
       >
         {error ? <p className="error-text">{error}</p> : null}
+        {notice ? <p className="muted">{notice}</p> : null}
         {runs.isLoading ? <p className="muted">Загружаю…</p> : null}
         {runs.data && runs.data.items.length === 0 ? (
           <p className="muted">
@@ -232,6 +266,12 @@ export function RunsPage() {
               <button className="btn" onClick={() => setShowDiff((value) => !value)}>
                 {showDiff ? 'Скрыть diff' : 'Сравнить'}
               </button>
+              <button className="btn" onClick={() => setShowJournal((value) => !value)}>
+                {showJournal ? 'Скрыть журнал' : 'Журнал'}
+              </button>
+              <button className="btn" onClick={() => setShowHeal((value) => !value)}>
+                {showHeal ? 'Скрыть починку' : 'Self-heal'}
+              </button>
             </div>
           }
         >
@@ -292,6 +332,116 @@ export function RunsPage() {
                     ['Против', diff.data.previous_run_id.slice(0, 10) + '…'],
                   ]}
                 />
+              ) : null}
+            </div>
+          ) : null}
+
+          {showJournal ? (
+            <div style={{ marginTop: 12 }}>
+              {journal.isLoading ? <p className="muted">Загружаю журнал…</p> : null}
+              {journal.data && journal.data.length === 0 ? (
+                <p className="muted">Журнал пуст</p>
+              ) : null}
+              {journal.data && journal.data.length > 0 ? (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Шаг</th>
+                      <th>Сообщение</th>
+                      <th>Уровень</th>
+                      <th>мс</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {journal.data.map((step, index) => (
+                      <tr key={`${step.name}-${index}`}>
+                        <td>
+                          <code>{step.name}</code>
+                        </td>
+                        <td>{step.message}</td>
+                        <td>
+                          <Badge
+                            tone={
+                              step.level === 'error'
+                                ? 'error'
+                                : step.level === 'warn'
+                                  ? 'warn'
+                                  : 'neutral'
+                            }
+                          >
+                            {step.level}
+                          </Badge>
+                        </td>
+                        <td>{step.duration_ms || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : null}
+            </div>
+          ) : null}
+
+          {showHeal ? (
+            <div style={{ marginTop: 12 }}>
+              {heal.isLoading ? <p className="muted">Ищу замены селекторов…</p> : null}
+              {heal.isError ? (
+                <p className="error-text">
+                  {heal.error instanceof ApiError ? heal.error.message : String(heal.error)}
+                </p>
+              ) : null}
+              {heal.data ? (
+                <>
+                  <KeyValue
+                    items={[
+                      ['Нужна починка', heal.data.needed ? 'да' : 'нет'],
+                      ['Полнота', `${Math.round(heal.data.coverage * 100)}%`],
+                      ['Сломанные поля', heal.data.broken_fields.join(', ') || '—'],
+                    ]}
+                  />
+                  {heal.data.notes.map((note) => (
+                    <p className="muted" key={note}>
+                      {note}
+                    </p>
+                  ))}
+                  {heal.data.patches.length > 0 ? (
+                    <>
+                      <table className="table" style={{ marginTop: 8 }}>
+                        <thead>
+                          <tr>
+                            <th>Поле</th>
+                            <th>Было</th>
+                            <th>Станет</th>
+                            <th>Источник</th>
+                            <th>Совпадений</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {heal.data.patches.map((patch) => (
+                            <tr key={patch.key}>
+                              <td>{patch.title}</td>
+                              <td>
+                                <code>{patch.old_selector}</code>
+                              </td>
+                              <td>
+                                <code>{patch.new_selector}</code>
+                              </td>
+                              <td>{patch.source}</td>
+                              <td>{patch.matches}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p className="muted">{heal.data.apply_hint}</p>
+                      <button
+                        className="btn btn--primary"
+                        disabled={applyHeal.isPending}
+                        onClick={() => applyHeal.mutate()}
+                      >
+                        {applyHeal.isPending ? 'Применяю…' : 'Применить патч (новая версия)'}
+                      </button>
+                    </>
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : null}

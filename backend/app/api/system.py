@@ -61,15 +61,15 @@ FEATURES: list[FeatureStatus] = [
         key="storage_export",
         title="Хранение и экспорт",
         stage="5",
-        status="in_progress",
+        status="done",
         description="Экспорт CSV/XLSX/JSON, Markdown-ТЗ, diff запусков, артефакты",
     ),
     FeatureStatus(
         key="self_healing",
         title="Надёжность и self-healing",
         stage="6",
-        status="planned",
-        description="Автопочинка селекторов, ретраи, наблюдаемость",
+        status="in_progress",
+        description="Диагностика селекторов, предложение патча, журнал, ретраи, robots.txt",
     ),
     FeatureStatus(
         key="form_fill",
@@ -150,7 +150,7 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="5",
         title="Хранение и экспорт",
-        status="in_progress",
+        status="done",
         items=[
             "экспорт CSV/XLSX/JSON/JSONL/Markdown",
             "генератор ТЗ в Markdown",
@@ -161,8 +161,13 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="6",
         title="Надёжность и self-healing",
-        status="planned",
-        items=["автопочинка селекторов", "ретраи", "наблюдаемость"],
+        status="in_progress",
+        items=[
+            "диагностика сломанных селекторов",
+            "предложение патча без автоприменения",
+            "журнал шагов запуска",
+            "ретраи сети и проверка robots.txt",
+        ],
     ),
     StageInfo(
         key="7",
@@ -178,7 +183,7 @@ STAGES: list[StageInfo] = [
     ),
 ]
 
-CURRENT_STAGE = "5"
+CURRENT_STAGE = "6"
 
 
 def _settings(request: Request) -> Settings:

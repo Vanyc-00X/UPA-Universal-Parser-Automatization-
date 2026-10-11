@@ -291,6 +291,45 @@ export const api = {
         download_url: string
       }>
     >(`${API_PREFIX}/runs/${runId}/artifacts`),
+
+  // --- Этап 6: self-healing ----------------------------------------------
+  runHeal: (runId: string, refresh = false) =>
+    request<{
+      run_id: string
+      scenario_id: string
+      needed: boolean
+      coverage: number
+      min_coverage: number
+      broken_fields: string[]
+      patches: Array<{
+        key: string
+        title: string
+        old_selector: string
+        new_selector: string
+        reason: string
+        matches: number
+        source: string
+        required: boolean
+      }>
+      notes: string[]
+      apply_hint: string
+    }>(`${API_PREFIX}/runs/${runId}/heal${query({ refresh })}`),
+  applyHeal: (runId: string, payload: { keys?: string[]; change_note?: string } = {}) =>
+    post<{
+      scenario_id: string
+      version: number
+      applied: Array<{ key: string; new_selector: string }>
+    }>(`${API_PREFIX}/runs/${runId}/heal/apply`, payload),
+  runJournal: (runId: string) =>
+    request<
+      Array<{
+        name: string
+        message: string
+        level: string
+        duration_ms: number
+        details: Record<string, unknown>
+      }>
+    >(`${API_PREFIX}/runs/${runId}/journal`),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */

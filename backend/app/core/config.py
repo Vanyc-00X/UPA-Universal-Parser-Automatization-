@@ -117,6 +117,13 @@ class Settings(BaseSettings):
     llm_cloud_model: str = ""
     llm_timeout_s: int = 180
 
+    # --- Надёжность / self-healing (Этап 6) ---------------------------------
+    respect_robots_txt: bool = True
+    fetch_max_retries: int = 3
+    fetch_retry_backoff_ms: int = 500
+    heal_min_coverage: float = 0.95
+    heal_auto_propose: bool = True
+
     # --- Артефакты ----------------------------------------------------------
     artifacts_retention_days: int = 30
 

@@ -36,6 +36,8 @@ from app.crawler import store
 from app.editor import scenario as scenario_service
 from app.editor.schema import PaginationKind, ScenarioDefinition
 from app.engine import extractor, paginate, validate
+from app.healing.journal import RunJournal
+from app.healing.retry import with_retries
 from app.storage.models import ElementMap, Run, RunItem, RunStatus, RunTrigger, Snapshot
 
 log = get_logger(__name__)
@@ -141,6 +143,9 @@ async def run_definition(
     а первая берётся из снапшота.
     """
     started = time.monotonic()
+    journal = RunJournal()
+    journal.start("run")
+    fetch_attempts: list[dict[str, Any]] = []
 
     run = Run(
         scenario_id=scenario_id,
@@ -159,9 +164,15 @@ async def run_definition(
         raise ValidationError("Запуск возможен только для сохранённого сценария")
     session.add(run)
     await session.flush()
+    journal.info("run_created", "запуск создан", run_id=run.id)
 
     html, snapshot = (
         await _snapshot_html(session, settings, snapshot_id) if snapshot_id else (None, None)
+    )
+    journal.info(
+        "load_snapshot",
+        "снапшот загружен" if html else "DOM снапшота отсутствует",
+        snapshot_id=snapshot_id,
     )
     if html is None and fetch_page is None:
         raise NotFoundError(
@@ -171,6 +182,12 @@ async def run_definition(
 
     base_url = (snapshot.final_url or snapshot.url) if snapshot else definition.url
     plan = paginate.build_plan(definition.pagination)
+    journal.info(
+        "plan",
+        f"режим {definition.plan.mode}, пагинация {plan.kind.value}",
+        fields=len(definition.fields),
+        max_pages=plan.max_pages,
+    )
 
     pages: list[PageResult] = []
     records: list[extractor.ExtractedRecord] = []
@@ -181,14 +198,25 @@ async def run_definition(
     # --- Первая страница ----------------------------------------------------
     first_html = html
     if first_html is None and fetch_page is not None:
-        first_html, problem = await fetch_page(base_url)
+        first_html, problem, fetch_attempts = await with_retries(
+            lambda: fetch_page(base_url),
+            max_attempts=settings.fetch_max_retries,
+            backoff_ms=settings.fetch_retry_backoff_ms,
+        )
         if first_html is None:
+            journal.error(
+                "fetch_first",
+                problem or "не удалось получить страницу",
+                attempts=fetch_attempts,
+            )
+            run.stats = {"journal": journal.as_list(), "fetch_attempts": fetch_attempts}
             await _finish_run(
                 session, run, RunStatus.FAILED, problem or "не удалось получить страницу"
             )
             raise ValidationError(
                 "Не удалось получить первую страницу", details={"reason": problem}
             )
+        journal.info("fetch_first", "первая страница получена", attempts=len(fetch_attempts))
 
     queued = _page_queue(plan, base_url)
     first_visit = queued.pop(0) if queued else paginate.PageVisit(1, base_url, base_url)
@@ -208,6 +236,7 @@ async def run_definition(
             stopped_reason = "нет разметки для следующей страницы"
             break
 
+        journal.start(f"page_{page_number}")
         document = parse(current_html)
         result = extractor.extract_page(document, definition, base_url=current_url)
 
@@ -222,6 +251,12 @@ async def run_definition(
                 )
             )
             stopped_reason = "; ".join(result.errors)
+            journal.error(
+                f"page_{page_number}",
+                stopped_reason,
+                url=current_url,
+                errors=result.errors,
+            )
             break
 
         added = 0
@@ -242,6 +277,12 @@ async def run_definition(
                 is_valid=True,
                 note="; ".join(result.warnings) or None,
             )
+        )
+        journal.info(
+            f"page_{page_number}",
+            f"собрано {added} записей",
+            url=current_url,
+            warnings=result.warnings,
         )
         run.pages_done = len([page for page in pages if page.is_valid])
         run.items_count = len(records)
@@ -292,7 +333,12 @@ async def run_definition(
             await _sleep(plan.delay_ms / 1000)
 
         if fetch_page is not None:
-            next_html, problem = await fetch_page(next_url)
+            next_html, problem, page_attempts = await with_retries(
+                lambda url=next_url: fetch_page(url),
+                max_attempts=settings.fetch_max_retries,
+                backoff_ms=settings.fetch_retry_backoff_ms,
+            )
+            fetch_attempts.extend(page_attempts)
             if next_html is None:
                 pages.append(
                     PageResult(
@@ -304,6 +350,12 @@ async def run_definition(
                     )
                 )
                 stopped_reason = problem or "страница не получена"
+                journal.error(
+                    "fetch_next",
+                    stopped_reason,
+                    url=next_url,
+                    attempts=page_attempts,
+                )
                 break
             current_html = next_html
         else:
@@ -344,17 +396,47 @@ async def run_definition(
     # «Страниц больше нет» — нормальное завершение, не ошибка запуска.
     finish_error = stopped_reason if status == RunStatus.FAILED else None
     await _finish_run(session, run, status, finish_error)
+
+    duration_ms = int((time.monotonic() - started) * 1000)
+    fallback_usage = _fallback_usage(records)
+    journal.info(
+        "run",
+        "запуск завершён",
+        status=status.value,
+        records=report.records,
+        coverage=report.required_coverage,
+        fallback_fields=list(fallback_usage),
+    )
     run.stats = {
         **(run.stats or {}),
         "duplicates": duplicates,
         "stopped_reason": stopped_reason,
-        "duration_ms": int((time.monotonic() - started) * 1000),
+        "duration_ms": duration_ms,
         "required_coverage": report.required_coverage,
         "passed": report.passed,
+        "journal": journal.as_list(),
+        "fetch_attempts": fetch_attempts,
+        "pages": [page.as_dict() for page in pages],
+        "fallback_usage": fallback_usage,
     }
     await session.flush()
 
-    duration_ms = int((time.monotonic() - started) * 1000)
+    # Self-healing: низкая полнота или работа через fallback → предложение патча.
+    needs_heal = (
+        not report.passed
+        or report.required_coverage < settings.heal_min_coverage
+        or bool(fallback_usage)
+    )
+    if settings.heal_auto_propose and needs_heal:
+        try:
+            from app.healing import service as healing_service
+
+            await healing_service.build_heal_proposal(
+                session, settings, run.id, min_coverage=min_coverage
+            )
+        except Exception as exc:  # noqa: BLE001 — healing не должен ронять запуск
+            log.warning("healing.propose_failed", run_id=run.id, error=str(exc)[:200])
+
     log.info(
         "engine.run_finished",
         run_id=run.id,
@@ -382,6 +464,16 @@ def _page_queue(plan: paginate.PaginationPlan, base_url: str) -> list[paginate.P
         if visits:
             return visits
     return []
+
+
+def _fallback_usage(records: list[extractor.ExtractedRecord]) -> dict[str, int]:
+    """Счётчик полей, которые собрались только через запасной селектор."""
+    counts: dict[str, int] = {}
+    for record in records:
+        for key, used in record.used_fallback.items():
+            if used:
+                counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 async def _html_from_snapshots(session: AsyncSession, settings: Settings, url: str) -> str | None:

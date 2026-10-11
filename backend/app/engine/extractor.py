@@ -63,6 +63,9 @@ class ExtractedRecord:
     values: dict[str, Any] = field(default_factory=dict)
     raws: dict[str, str | None] = field(default_factory=dict)
     problems: dict[str, str] = field(default_factory=dict)
+    # Какой селектор реально сработал: нужно self-healing (Этап 6).
+    selectors_used: dict[str, str] = field(default_factory=dict)
+    used_fallback: dict[str, bool] = field(default_factory=dict)
     position: int = 0
     source_url: str | None = None
     node_path: str | None = None
@@ -80,6 +83,8 @@ class ExtractedRecord:
             "values": self.values,
             "raws": self.raws,
             "problems": self.problems,
+            "selectors_used": self.selectors_used,
+            "used_fallback": self.used_fallback,
             "position": self.position,
             "source_url": self.source_url,
         }
@@ -176,6 +181,8 @@ def extract_from_scope(
 
     for spec in definition.fields:
         nodes = _find_nodes(scope, spec.selector)
+        used_selector = spec.selector
+        via_fallback = False
 
         # Запасной селектор нужен, когда основной перестал работать: так сценарий
         # продолжает собирать данные, пока пользователь не поправит его.
@@ -183,12 +190,15 @@ def extract_from_scope(
             for fallback in spec.fallback_selectors:
                 nodes = _find_nodes(scope, fallback)
                 if nodes:
+                    used_selector = fallback
+                    via_fallback = True
                     break
 
         if not nodes:
             record.values[spec.key] = None
             record.raws[spec.key] = None
             record.problems[spec.key] = "селектор не находит элементов"
+            record.used_fallback[spec.key] = False
             continue
 
         raw = _text_from(nodes[0], spec.strategy, spec.attribute)
@@ -197,6 +207,10 @@ def extract_from_scope(
 
         record.values[spec.key] = normalized.value
         record.raws[spec.key] = normalized.raw
+        record.selectors_used[spec.key] = used_selector
+        record.used_fallback[spec.key] = via_fallback
+        if via_fallback:
+            record.problems[spec.key] = "основной селектор не сработал, использован запасной"
         if normalized.problem and spec.required:
             record.problems[spec.key] = normalized.problem
 
