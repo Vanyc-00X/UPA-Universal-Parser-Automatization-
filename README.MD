@@ -161,11 +161,16 @@ Or double-click [`launch.cmd`](launch.cmd). Desktop shortcut:
 | API | http://127.0.0.1:8000 |
 | API docs | http://127.0.0.1:8000/docs |
 
-**Works without AI.** Ollama improves page analysis:
+**Works without AI.** Optional model providers:
 
-```powershell
-.\run.ps1 -PullModel
-```
+| Provider | How |
+|---|---|
+| **Ollama** | Local default — `.\run.ps1 -PullModel` |
+| **llama.cpp** | OpenAI-compatible server at `http://127.0.0.1:8080/v1` |
+| **OpenAI / OpenRouter / Grok** | Paste API key on **Dashboard → AI model** (or `.env`) |
+| **Custom** | Any `/v1/chat/completions` endpoint |
+
+Settings are saved to `data/llm_settings.json` from the UI. Env vars: see `.env.example`.
 
 **Browser install (mirrors + Chrome/Edge fallback):**
 

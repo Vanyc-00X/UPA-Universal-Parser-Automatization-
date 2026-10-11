@@ -9,6 +9,8 @@ import type {
   ApiErrorBody,
   FeaturesResponse,
   HealthResponse,
+  LLMConfigResponse,
+  LLMConfigUpdateRequest,
   LLMStatusResponse,
   RoadmapResponse,
   SystemInfoResponse,
@@ -159,6 +161,13 @@ export const api = {
   features: () => request<FeaturesResponse>(`${API_PREFIX}/system/features`),
   roadmap: () => request<RoadmapResponse>(`${API_PREFIX}/system/roadmap`),
   llmStatus: () => request<LLMStatusResponse>(`${API_PREFIX}/system/llm`),
+  llmConfig: () => request<LLMConfigResponse>(`${API_PREFIX}/system/llm/config`),
+  updateLlmConfig: (payload: LLMConfigUpdateRequest) =>
+    request<LLMConfigResponse>(`${API_PREFIX}/system/llm/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
 
   // --- Этап 1: сайты и снапшоты ------------------------------------------
   captureSnapshot: (payload: SnapshotCaptureRequest) =>
@@ -529,6 +538,7 @@ export const queryKeys = {
   features: ['system', 'features'] as const,
   roadmap: ['system', 'roadmap'] as const,
   llm: ['system', 'llm'] as const,
+  llmConfig: ['system', 'llm', 'config'] as const,
   sites: ['sites'] as const,
   snapshots: (siteId?: string) => ['snapshots', siteId ?? 'all'] as const,
   snapshot: (id: string) => ['snapshot', id] as const,

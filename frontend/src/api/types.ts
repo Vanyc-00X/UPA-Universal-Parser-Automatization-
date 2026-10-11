@@ -84,6 +84,45 @@ export interface LLMStatusResponse {
   detail: string | null
 }
 
+export interface LLMPreset {
+  id: string
+  label: string
+  description: string
+  needs_key: boolean
+  local: boolean
+  default_base_url: string | null
+  default_model: string | null
+}
+
+export interface LLMConfigResponse {
+  provider: string
+  ollama_base_url: string
+  ollama_model: string
+  llamacpp_base_url: string
+  llamacpp_model: string
+  llm_cloud_fallback: boolean
+  llm_cloud_base_url: string
+  llm_cloud_model: string
+  llm_cloud_api_key_set: boolean
+  llm_cloud_api_key_masked: string
+  llm_timeout_s: number
+  presets: LLMPreset[]
+}
+
+export interface LLMConfigUpdateRequest {
+  provider?: string
+  ollama_base_url?: string
+  ollama_model?: string
+  llamacpp_base_url?: string
+  llamacpp_model?: string
+  llm_cloud_fallback?: boolean
+  llm_cloud_base_url?: string
+  llm_cloud_model?: string
+  llm_cloud_api_key?: string
+  clear_api_key?: boolean
+  llm_timeout_s?: number
+}
+
 export interface ApiErrorBody {
   code: string
   message: string

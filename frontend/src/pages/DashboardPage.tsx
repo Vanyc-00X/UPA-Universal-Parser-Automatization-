@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { ApiError, api, queryKeys } from '../api/client'
@@ -23,10 +23,33 @@ export function DashboardPage() {
   const queryClient = useQueryClient()
   const [llmNotice, setLlmNotice] = useState<string | null>(null)
   const [llmError, setLlmError] = useState<string | null>(null)
+  const [provider, setProvider] = useState('ollama')
+  const [model, setModel] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [cloudFallback, setCloudFallback] = useState(false)
   const health = useQuery({ queryKey: queryKeys.health, queryFn: api.health, refetchInterval: 15_000 })
   const info = useQuery({ queryKey: queryKeys.systemInfo, queryFn: api.systemInfo })
   const llm = useQuery({ queryKey: queryKeys.llm, queryFn: api.llmStatus })
+  const llmConfig = useQuery({ queryKey: queryKeys.llmConfig, queryFn: api.llmConfig })
   const features = useQuery({ queryKey: queryKeys.features, queryFn: api.features })
+
+  useEffect(() => {
+    const cfg = llmConfig.data
+    if (!cfg) return
+    setProvider(cfg.provider)
+    setCloudFallback(cfg.llm_cloud_fallback)
+    if (cfg.provider === 'ollama') {
+      setModel(cfg.ollama_model)
+      setBaseUrl(cfg.ollama_base_url)
+    } else if (cfg.provider === 'llamacpp') {
+      setModel(cfg.llamacpp_model)
+      setBaseUrl(cfg.llamacpp_base_url)
+    } else {
+      setModel(cfg.llm_cloud_model)
+      setBaseUrl(cfg.llm_cloud_base_url)
+    }
+  }, [llmConfig.data])
 
   const ensureLlm = useMutation({
     mutationFn: (pull: boolean) => api.ensureLlm(pull),
@@ -40,6 +63,48 @@ export function DashboardPage() {
       setLlmError(err instanceof ApiError ? err.message : String(err))
     },
   })
+
+  const saveLlm = useMutation({
+    mutationFn: () => {
+      const payload: Record<string, unknown> = {
+        provider,
+        llm_cloud_fallback: cloudFallback,
+      }
+      if (provider === 'ollama') {
+        payload.ollama_model = model
+        payload.ollama_base_url = baseUrl
+      } else if (provider === 'llamacpp') {
+        payload.llamacpp_model = model
+        payload.llamacpp_base_url = baseUrl
+      } else if (provider !== 'none') {
+        payload.llm_cloud_model = model
+        if (provider === 'openai_compatible' || baseUrl) {
+          payload.llm_cloud_base_url = baseUrl
+        }
+        if (apiKey.trim()) payload.llm_cloud_api_key = apiKey.trim()
+      }
+      return api.updateLlmConfig(payload)
+    },
+    onSuccess: () => {
+      setApiKey('')
+      setLlmNotice('Настройки ИИ сохранены')
+      setLlmError(null)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.llm })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.llmConfig })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.health })
+    },
+    onError: (err: unknown) => {
+      setLlmError(err instanceof ApiError ? err.message : String(err))
+    },
+  })
+
+  const selectedPreset = llmConfig.data?.presets.find((item) => item.id === provider)
+  const needsKey = Boolean(selectedPreset?.needs_key)
+  const showBaseUrl =
+    provider === 'ollama' ||
+    provider === 'llamacpp' ||
+    provider === 'openai_compatible' ||
+    Boolean(baseUrl)
 
   return (
     <div className="grid">
@@ -99,7 +164,10 @@ export function DashboardPage() {
         {health.isLoading ? <p className="muted">Проверяю…</p> : null}
       </Card>
 
-      <Card title="Локальная ИИ-модель" subtitle="UPA работает и без неё: ИИ — усилитель, не зависимость">
+      <Card
+        title="ИИ-модель"
+        subtitle="Ollama, llama.cpp или API-ключ (OpenRouter / OpenAI / Grok). Без ИИ UPA тоже работает"
+      >
         {llm.data ? (
           <>
             <p>
@@ -113,37 +181,126 @@ export function DashboardPage() {
             <KeyValue
               items={[
                 ['Модель', llm.data.model ?? '—'],
-                ['Локальных моделей', String(llm.data.models.length)],
+                ['Моделей в списке', String(llm.data.models.length)],
                 ['Облачный фолбэк', llm.data.cloud_fallback_enabled ? 'включён' : 'выключен'],
+                [
+                  'Ключ API',
+                  llmConfig.data?.llm_cloud_api_key_set
+                    ? llmConfig.data.llm_cloud_api_key_masked || 'задан'
+                    : 'не задан',
+                ],
               ]}
             />
             {llm.data.detail ? <p className="muted">{llm.data.detail}</p> : null}
             {llmError ? <p className="error-text">{llmError}</p> : null}
             {llmNotice ? <p className="muted">{llmNotice}</p> : null}
+
+            <div className="form-grid" style={{ marginTop: 12 }}>
+              <label className="field">
+                <span>Провайдер</span>
+                <select
+                  className="input"
+                  value={provider}
+                  onChange={(event) => {
+                    const next = event.target.value
+                    setProvider(next)
+                    const preset = llmConfig.data?.presets.find((item) => item.id === next)
+                    if (preset?.default_model) setModel(preset.default_model)
+                    if (preset?.default_base_url) setBaseUrl(preset.default_base_url)
+                    else if (next !== 'openai_compatible' && next !== 'ollama' && next !== 'llamacpp') {
+                      setBaseUrl('')
+                    }
+                  }}
+                >
+                  {(llmConfig.data?.presets ?? []).map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {provider !== 'none' ? (
+                <label className="field">
+                  <span>Модель</span>
+                  <input
+                    className="input"
+                    value={model}
+                    onChange={(event) => setModel(event.target.value)}
+                    placeholder={selectedPreset?.default_model ?? 'model-id'}
+                  />
+                </label>
+              ) : null}
+              {showBaseUrl && provider !== 'none' ? (
+                <label className="field form-grid__full">
+                  <span>Base URL</span>
+                  <input
+                    className="input"
+                    value={baseUrl}
+                    onChange={(event) => setBaseUrl(event.target.value)}
+                    placeholder={selectedPreset?.default_base_url ?? 'https://…/v1'}
+                  />
+                </label>
+              ) : null}
+              {needsKey ? (
+                <label className="field form-grid__full">
+                  <span>API key</span>
+                  <input
+                    className="input"
+                    type="password"
+                    value={apiKey}
+                    onChange={(event) => setApiKey(event.target.value)}
+                    placeholder={
+                      llmConfig.data?.llm_cloud_api_key_set
+                        ? 'оставьте пустым, чтобы не менять'
+                        : 'sk-… / or-…'
+                    }
+                  />
+                </label>
+              ) : null}
+              <label className="field form-grid__full" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={cloudFallback}
+                  onChange={(event) => setCloudFallback(event.target.checked)}
+                />
+                <span className="muted small">
+                  Если локальная модель недоступна — пробовать облачный ключ (OpenAI-compatible)
+                </span>
+              </label>
+            </div>
+
             <div className="form-row" style={{ marginTop: 10 }}>
+              <button
+                className="btn btn--primary"
+                type="button"
+                disabled={saveLlm.isPending}
+                onClick={() => saveLlm.mutate()}
+              >
+                {saveLlm.isPending ? 'Сохраняю…' : 'Сохранить ИИ'}
+              </button>
               <button
                 className="btn"
                 type="button"
                 disabled={ensureLlm.isPending}
                 onClick={() => ensureLlm.mutate(false)}
               >
-                Проверить Ollama
+                Проверить
               </button>
-              <button
-                className="btn btn--primary"
-                type="button"
-                disabled={ensureLlm.isPending}
-                onClick={() => ensureLlm.mutate(true)}
-              >
-                {ensureLlm.isPending ? 'Загрузка…' : 'Загрузить модель'}
-              </button>
+              {provider === 'ollama' ? (
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={ensureLlm.isPending}
+                  onClick={() => ensureLlm.mutate(true)}
+                >
+                  {ensureLlm.isPending ? 'Загрузка…' : 'Ollama pull'}
+                </button>
+              ) : null}
             </div>
-            {!llm.data.available ? (
-              <p className="muted">
-                Запустите Ollama или продолжайте без ИИ: эвристики и ручной выбор элементов
-                доступны всегда.
-              </p>
-            ) : null}
+            <p className="muted small" style={{ marginTop: 8 }}>
+              {selectedPreset?.description ??
+                'Эвристики и ручной выбор элементов доступны всегда, даже без модели.'}
+            </p>
           </>
         ) : (
           <p className="muted">Опрашиваю…</p>

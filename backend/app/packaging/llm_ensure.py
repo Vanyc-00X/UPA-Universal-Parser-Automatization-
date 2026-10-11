@@ -35,14 +35,32 @@ async def ensure_ollama_model(
         "action": "none",
     }
 
+    from app.analyzer.llm import LLMGateway
+    from app.core.llm_runtime import with_llm_overrides
+
+    settings = with_llm_overrides(settings)
+    result["provider"] = settings.llm_provider
+    result["cloud_fallback_enabled"] = settings.llm_cloud_fallback
+    result["model"] = (
+        settings.ollama_model if settings.llm_provider == "ollama" else settings.llm_cloud_model
+    )
+
     if settings.llm_provider == "none":
         result["detail"] = "ИИ отключён в настройках — работайте вручную"
         result["action"] = "disabled"
         return result
 
     if settings.llm_provider != "ollama":
-        result["detail"] = f"Провайдер {settings.llm_provider} ещё не поддержан"
-        result["action"] = "unsupported"
+        status = await LLMGateway(settings).status()
+        result["available"] = status.available
+        result["model"] = status.model
+        result["models"] = status.models
+        result["detail"] = status.detail or (
+            f"Провайдер {settings.llm_provider} настроен"
+            if status.available
+            else f"Провайдер {settings.llm_provider} недоступен"
+        )
+        result["action"] = "ready" if status.available else "configure"
         return result
 
     base = settings.ollama_base_url.rstrip("/")

@@ -58,12 +58,16 @@ export function OnboardingWizard({ onClose }: OnboardingWizardProps) {
       ),
     },
     {
-      title: 'Локальная ИИ-модель',
+      title: 'ИИ-модель (необязательно)',
       body: (
         <>
+          <p className="muted">
+            Можно использовать Ollama, llama.cpp или API-ключ OpenRouter / OpenAI / Grok — настройте
+            позже на экране «Обзор».
+          </p>
           {llm.data ? (
             <p>
-              Ollama:{' '}
+              Сейчас: <code>{llm.data.provider}</code>{' '}
               {llm.data.available ? (
                 <span className="badge badge--ok">доступна</span>
               ) : (
@@ -91,7 +95,7 @@ export function OnboardingWizard({ onClose }: OnboardingWizardProps) {
               disabled={ensure.isPending}
               onClick={() => ensure.mutate(true)}
             >
-              {ensure.isPending ? 'Загрузка…' : 'Загрузить модель'}
+              {ensure.isPending ? 'Загрузка…' : 'Ollama pull'}
             </button>
           </div>
           <p className="muted" style={{ marginTop: 8 }}>

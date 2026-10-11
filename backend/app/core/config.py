@@ -108,9 +108,22 @@ class Settings(BaseSettings):
     browser_dismiss_cookie_banners: bool = True
 
     # --- LLM ----------------------------------------------------------------
-    llm_provider: Literal["ollama", "openai_compatible", "none"] = "ollama"
+    # ollama | llamacpp | openai | openrouter | grok | openai_compatible | none
+    llm_provider: Literal[
+        "ollama",
+        "llamacpp",
+        "openai",
+        "openrouter",
+        "grok",
+        "openai_compatible",
+        "none",
+    ] = "ollama"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5:7b"
+    # llama.cpp server (OpenAI-compatible /v1)
+    llamacpp_base_url: str = "http://127.0.0.1:8080/v1"
+    llamacpp_model: str = "local"
+    # Облачный / OpenAI-совместимый ключ (OpenAI, OpenRouter, Grok, custom).
     llm_cloud_fallback: bool = False
     llm_cloud_base_url: str = ""
     llm_cloud_api_key: str = ""

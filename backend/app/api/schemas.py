@@ -74,6 +74,49 @@ class LLMStatusResponse(BaseModel):
     detail: str | None = None
 
 
+class LLMPresetOut(BaseModel):
+    id: str
+    label: str
+    description: str
+    needs_key: bool
+    local: bool
+    default_base_url: str | None = None
+    default_model: str | None = None
+
+
+class LLMConfigResponse(BaseModel):
+    """Текущая конфигурация ИИ (ключ маскируется)."""
+
+    provider: str
+    ollama_base_url: str
+    ollama_model: str
+    llamacpp_base_url: str
+    llamacpp_model: str
+    llm_cloud_fallback: bool
+    llm_cloud_base_url: str
+    llm_cloud_model: str
+    llm_cloud_api_key_set: bool
+    llm_cloud_api_key_masked: str = ""
+    llm_timeout_s: int
+    presets: list[LLMPresetOut] = Field(default_factory=list)
+
+
+class LLMConfigUpdateRequest(BaseModel):
+    """Сохранение провайдера и ключа из UI (пишется в data/llm_settings.json)."""
+
+    provider: str | None = None
+    ollama_base_url: str | None = None
+    ollama_model: str | None = None
+    llamacpp_base_url: str | None = None
+    llamacpp_model: str | None = None
+    llm_cloud_fallback: bool | None = None
+    llm_cloud_base_url: str | None = None
+    llm_cloud_model: str | None = None
+    llm_cloud_api_key: str | None = None
+    clear_api_key: bool = False
+    llm_timeout_s: int | None = None
+
+
 class BrowserStatusResponse(BaseModel):
     """Готовность браузера для съёмки и живой записи."""
 

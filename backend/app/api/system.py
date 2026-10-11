@@ -12,6 +12,8 @@ from app.api.schemas import (
     FeaturesResponse,
     FeatureStatus,
     HealthResponse,
+    LLMConfigResponse,
+    LLMConfigUpdateRequest,
     LLMStatusResponse,
     RoadmapResponse,
     StageInfo,
@@ -268,6 +270,8 @@ async def system_info(request: Request) -> SystemInfoResponse:
             "provider": settings.llm_provider,
             "ollama_base_url": settings.ollama_base_url,
             "ollama_model": settings.ollama_model,
+            "llamacpp_base_url": settings.llamacpp_base_url,
+            "llamacpp_model": settings.llamacpp_model,
             "cloud_fallback": settings.llm_cloud_fallback,
         },
     )
@@ -296,12 +300,42 @@ async def roadmap() -> RoadmapResponse:
 @router.get(
     "/system/llm",
     response_model=LLMStatusResponse,
-    summary="Состояние локальной ИИ-модели",
+    summary="Состояние настроенного ИИ-провайдера",
 )
 async def llm_status(request: Request) -> LLMStatusResponse:
     settings = _settings(request)
     data = await deps.check_llm(settings)
     return LLMStatusResponse(**data)
+
+
+@router.get(
+    "/system/llm/config",
+    response_model=LLMConfigResponse,
+    summary="Конфигурация ИИ (Ollama / llama.cpp / OpenRouter / OpenAI / Grok)",
+)
+async def llm_config(request: Request) -> LLMConfigResponse:
+    from app.core.llm_runtime import public_config
+
+    return LLMConfigResponse(**public_config(_settings(request)))
+
+
+@router.put(
+    "/system/llm/config",
+    response_model=LLMConfigResponse,
+    summary="Сохранить провайдера и API-ключ",
+)
+async def update_llm_config(
+    payload: LLMConfigUpdateRequest,
+    request: Request,
+) -> LLMConfigResponse:
+    from app.core.llm_runtime import public_config, save_overrides
+
+    settings = _settings(request)
+    updates = payload.model_dump(exclude_unset=True)
+    if "provider" in updates:
+        updates["llm_provider"] = updates.pop("provider")
+    save_overrides(settings, updates)
+    return LLMConfigResponse(**public_config(settings))
 
 
 @router.get(

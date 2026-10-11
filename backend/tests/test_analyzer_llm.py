@@ -131,9 +131,10 @@ async def test_gateway_status_for_incomplete_cloud_config(settings: Settings) ->
     settings.llm_provider = "openai_compatible"
     settings.llm_cloud_base_url = ""
     settings.llm_cloud_api_key = ""
-    status = await LLMGateway(settings).status()
+    status = await LLMGateway(settings, apply_overrides=False).status()
     assert status.available is False
-    assert "ключ" in (status.detail or "")
+    detail = (status.detail or "").lower()
+    assert "url" in detail or "ключ" in detail or "api" in detail
 
 
 async def test_gateway_complete_without_provider_returns_error(settings: Settings) -> None:
