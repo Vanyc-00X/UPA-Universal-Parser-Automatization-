@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { ApiError, api, queryKeys } from '../api/client'
@@ -65,6 +65,9 @@ export function WorkflowPage() {
   ])
   const [csvText, setCsvText] = useState(DEFAULT_CSV)
   const [eventsJson, setEventsJson] = useState(DEFAULT_EVENTS)
+  const [showRawJson, setShowRawJson] = useState(false)
+  const [recordingSessionId, setRecordingSessionId] = useState<string | null>(null)
+  const [liveEvents, setLiveEvents] = useState<RecordedEvent[]>([])
   const [scenarioId, setScenarioId] = useState<string | null>(null)
   const [report, setReport] = useState<WorkflowReport | null>(null)
   const [script, setScript] = useState<string | null>(null)
@@ -207,6 +210,62 @@ export function WorkflowPage() {
       setError(err instanceof ApiError ? err.message : String(err))
     },
   })
+
+  const startLive = useMutation({
+    mutationFn: () => api.startLiveRecording({ url, headed: true }),
+    onSuccess: (session) => {
+      setRecordingSessionId(session.session_id)
+      setLiveEvents(session.events)
+      setNotice('Браузер открыт — кликайте и заполняйте форму. Затем нажмите «Стоп».')
+      setError(null)
+    },
+    onError: (err: unknown) => {
+      setError(err instanceof ApiError ? err.message : String(err))
+    },
+  })
+
+  const stopLive = useMutation({
+    mutationFn: () => {
+      if (!recordingSessionId) throw new Error('Нет активной записи')
+      return api.stopLiveRecording(recordingSessionId, title)
+    },
+    onSuccess: (result) => {
+      setRecordingSessionId(null)
+      setLiveEvents(result.session.events)
+      if (result.workflow) {
+        setSteps(result.workflow.steps)
+        setUrl(result.workflow.url)
+        setTitle(result.workflow.title)
+        setEventsJson(JSON.stringify(result.session.events, null, 2))
+      }
+      setNotice(
+        `Запись остановлена: ${result.session.events_count} событий. ${(result.notes || []).join(' ')}`,
+      )
+      setError(null)
+    },
+    onError: (err: unknown) => {
+      setError(err instanceof ApiError ? err.message : String(err))
+    },
+  })
+
+  useEffect(() => {
+    if (!recordingSessionId) return
+    const timer = window.setInterval(() => {
+      void api
+        .getLiveRecording(recordingSessionId)
+        .then((session) => {
+          setLiveEvents(session.events)
+          if (session.status === 'stopped' || session.status === 'failed') {
+            setRecordingSessionId(null)
+            if (session.error) setError(session.error)
+          }
+        })
+        .catch(() => {
+          /* опрос не должен ронять UI */
+        })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [recordingSessionId])
 
   const humanize = useMutation({
     mutationFn: () => api.humanizeWorkflow(workflow),
@@ -389,24 +448,87 @@ export function WorkflowPage() {
       </Card>
 
       <Card
-        title="Запись действий"
-        subtitle="Вставьте JSON событий (codegen-подобный режим). UPA соберёт шаги и подставит {{column}}."
+        title="Живая запись действий"
+        subtitle="Откройте страницу в браузере UPA и работайте как обычно — клики и поля появятся здесь"
         actions={
-          <button
-            className="btn"
-            disabled={applyRecording.isPending}
-            onClick={() => applyRecording.mutate()}
-          >
-            {applyRecording.isPending ? 'Собираю…' : 'Применить запись'}
-          </button>
+          <div className="row-actions">
+            {!recordingSessionId ? (
+              <button
+                className="btn btn--primary"
+                disabled={startLive.isPending || !url}
+                onClick={() => startLive.mutate()}
+              >
+                {startLive.isPending ? 'Открываю…' : 'Записать в браузере'}
+              </button>
+            ) : (
+              <button
+                className="btn btn--primary"
+                disabled={stopLive.isPending}
+                onClick={() => stopLive.mutate()}
+              >
+                {stopLive.isPending ? 'Останавливаю…' : 'Стоп и собрать шаги'}
+              </button>
+            )}
+            <button className="btn" type="button" onClick={() => setShowRawJson((v) => !v)}>
+              {showRawJson ? 'Скрыть JSON' : 'JSON вручную'}
+            </button>
+          </div>
         }
       >
-        <textarea
-          className="input"
-          style={{ width: '100%', minHeight: 140, fontFamily: 'ui-monospace, monospace' }}
-          value={eventsJson}
-          onChange={(e) => setEventsJson(e.target.value)}
-        />
+        {recordingSessionId ? (
+          <p className="muted small">
+            Сессия <code>{recordingSessionId}</code> · событий: {liveEvents.length}
+          </p>
+        ) : null}
+        {liveEvents.length > 0 ? (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Тип</th>
+                <th>Селектор / URL</th>
+                <th>Значение</th>
+              </tr>
+            </thead>
+            <tbody>
+              {liveEvents.map((event, index) => (
+                <tr key={`${event.type}-${index}-${event.selector ?? event.url ?? ''}`}>
+                  <td>{index + 1}</td>
+                  <td>
+                    <Badge tone="info">{event.type}</Badge>
+                  </td>
+                  <td className="muted small">{event.selector || event.url || '—'}</td>
+                  <td className="muted small">{event.value || event.text || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="muted">Пока нет событий — нажмите «Записать в браузере».</p>
+        )}
+        {showRawJson ? (
+          <>
+            <textarea
+              className="input"
+              style={{
+                width: '100%',
+                minHeight: 120,
+                fontFamily: 'ui-monospace, monospace',
+                marginTop: 12,
+              }}
+              value={eventsJson}
+              onChange={(e) => setEventsJson(e.target.value)}
+            />
+            <button
+              className="btn"
+              style={{ marginTop: 8 }}
+              disabled={applyRecording.isPending}
+              onClick={() => applyRecording.mutate()}
+            >
+              {applyRecording.isPending ? 'Собираю…' : 'Применить JSON'}
+            </button>
+          </>
+        ) : null}
       </Card>
 
       <Card

@@ -143,6 +143,31 @@ class HumanizeResponse(BaseModel):
     changes: list[str] = Field(default_factory=list)
 
 
+class LiveRecordStartRequest(BaseModel):
+    url: str
+    headed: bool = True
+    dry: bool = Field(
+        False,
+        description="Тестовый режим без браузера (только для автотестов)",
+    )
+
+
+class LiveRecordSessionOut(BaseModel):
+    session_id: str
+    url: str
+    status: str
+    error: str | None = None
+    events: list[RecordedEvent] = Field(default_factory=list)
+    events_count: int = 0
+
+
+class LiveRecordStopResponse(BaseModel):
+    session: LiveRecordSessionOut
+    workflow: WorkflowDefinition | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+
 # Реэкспорт для удобства OpenAPI.
 __all__ = [
     "ActionStep",

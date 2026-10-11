@@ -168,6 +168,50 @@ async def test_preview_steps(client: httpx.AsyncClient) -> None:
     assert steps[-1]["dangerous"] is True
 
 
+async def test_live_recording_dry_session(client: httpx.AsyncClient) -> None:
+    started = await client.post(
+        "/api/v1/workflows/recording/start",
+        json={"url": "https://example.com/form", "dry": True},
+    )
+    assert started.status_code == 200, started.text
+    session_id = started.json()["session_id"]
+    assert started.json()["status"] == "recording"
+    assert started.json()["events_count"] >= 1
+
+    polled = await client.get(f"/api/v1/workflows/recording/{session_id}")
+    assert polled.status_code == 200
+    assert polled.json()["session_id"] == session_id
+
+    stopped = await client.post(f"/api/v1/workflows/recording/{session_id}/stop")
+    assert stopped.status_code == 200, stopped.text
+    payload = stopped.json()
+    assert payload["session"]["status"] == "stopped"
+    assert payload["workflow"] is not None
+    assert payload["workflow"]["steps"]
+
+
+async def test_live_recording_dry_session(client: httpx.AsyncClient) -> None:
+    started = await client.post(
+        "/api/v1/workflows/recording/start",
+        json={"url": "https://example.com/form", "dry": True},
+    )
+    assert started.status_code == 200, started.text
+    session_id = started.json()["session_id"]
+    assert started.json()["status"] == "recording"
+    assert started.json()["events_count"] >= 1
+
+    polled = await client.get(f"/api/v1/workflows/recording/{session_id}")
+    assert polled.status_code == 200
+    assert polled.json()["session_id"] == session_id
+
+    stopped = await client.post(f"/api/v1/workflows/recording/{session_id}/stop")
+    assert stopped.status_code == 200, stopped.text
+    payload = stopped.json()
+    assert payload["session"]["status"] == "stopped"
+    assert payload["workflow"] is not None
+    assert payload["workflow"]["steps"]
+
+
 async def test_from_recording_and_humanize(client: httpx.AsyncClient) -> None:
     response = await client.post(
         "/api/v1/workflows/from-recording",

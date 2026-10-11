@@ -48,6 +48,51 @@ COOKIE_SELECTORS: tuple[str, ...] = (
 # Типы ресурсов, тела которых сохраняются: именно они чаще всего содержат данные.
 DATA_RESOURCE_TYPES = {"xhr", "fetch"}
 
+# Если Playwright Chromium не скачан, пробуем системные браузеры (частый случай в РФ/корп. сети).
+_CHANNEL_FALLBACKS = ("chrome", "msedge")
+
+
+async def launch_chromium(
+    playwright: Any,
+    settings: Settings,
+    *,
+    headless: bool | None = None,
+) -> Any:
+    """Запускает Chromium Playwright либо системный Chrome/Edge."""
+    launch_args: dict[str, Any] = {
+        "headless": settings.browser_headless if headless is None else headless
+    }
+    try:
+        browser = await playwright.chromium.launch(**launch_args)
+        log.info("browser.engine", engine="playwright-chromium")
+        return browser
+    except Exception as primary:  # noqa: BLE001
+        primary_msg = str(primary)
+        missing = "Executable doesn't exist" in primary_msg or "playwright install" in primary_msg
+        if not missing:
+            raise
+
+        last_error = primary
+        for channel in _CHANNEL_FALLBACKS:
+            try:
+                browser = await playwright.chromium.launch(channel=channel, **launch_args)
+                log.info("browser.engine", engine=channel, fallback=True)
+                return browser
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                continue
+
+        raise BrowserError(
+            "Браузер Chromium не установлен. Выполните: "
+            "python -m playwright install chromium "
+            "(или установите Google Chrome / Microsoft Edge)",
+            details={"reason": str(last_error)},
+        ) from last_error
+
+
+# Обратная совместимость для внутренних вызовов.
+_launch_chromium = launch_chromium
+
 
 @dataclass
 class NetworkEntry:
@@ -174,16 +219,19 @@ class BrowserSession:
             ) from exc
 
         self._playwright = await async_playwright().start()
-        launch_args: dict[str, Any] = {"headless": self.settings.browser_headless}
         try:
-            self._browser = await self._playwright.chromium.launch(**launch_args)
+            self._browser = await _launch_chromium(self._playwright, self.settings)
+        except BrowserError:
+            await self._stop_playwright()
+            raise
         except Exception as exc:  # noqa: BLE001 — сообщение Playwright информативно
             await self._stop_playwright()
             message = str(exc)
             if "Executable doesn't exist" in message or "playwright install" in message:
                 raise BrowserError(
                     "Браузер Chromium не установлен. Выполните: "
-                    "python -m playwright install chromium",
+                    "python -m playwright install chromium "
+                    "(или установите Google Chrome — UPA подхватит его автоматически)",
                     details={"reason": message},
                 ) from exc
             raise BrowserError("Не удалось запустить браузер", details={"reason": message}) from exc

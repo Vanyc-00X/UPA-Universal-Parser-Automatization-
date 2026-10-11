@@ -435,6 +435,41 @@ export const api = {
     events: RecordedEvent[]
     humanize?: boolean
   }) => post<RecordingResponse>(`${API_PREFIX}/workflows/from-recording`, payload),
+  startLiveRecording: (payload: { url: string; headed?: boolean; dry?: boolean }) =>
+    post<{
+      session_id: string
+      url: string
+      status: string
+      error: string | null
+      events: RecordedEvent[]
+      events_count: number
+    }>(`${API_PREFIX}/workflows/recording/start`, payload),
+  getLiveRecording: (sessionId: string) =>
+    request<{
+      session_id: string
+      url: string
+      status: string
+      error: string | null
+      events: RecordedEvent[]
+      events_count: number
+    }>(`${API_PREFIX}/workflows/recording/${sessionId}`),
+  stopLiveRecording: (sessionId: string, title?: string) =>
+    post<{
+      session: {
+        session_id: string
+        url: string
+        status: string
+        error: string | null
+        events: RecordedEvent[]
+        events_count: number
+      }
+      workflow: WorkflowDefinition | null
+      summary: Record<string, unknown>
+      notes: string[]
+    }>(
+      `${API_PREFIX}/workflows/recording/${sessionId}/stop${query({ title: title || 'Записанный сценарий', humanize: true })}`,
+      {},
+    ),
   humanizeWorkflow: (workflow: WorkflowDefinition) =>
     post<HumanizeResponse>(`${API_PREFIX}/workflows/humanize`, { workflow }),
 

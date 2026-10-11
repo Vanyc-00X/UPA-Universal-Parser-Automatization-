@@ -25,9 +25,11 @@ async def run_rows_live(
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError("Playwright не установлен") from exc
 
+    from app.crawler.browser import launch_chromium
+
     results: list[RowResult] = []
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=settings.browser_headless)
+        browser = await launch_chromium(playwright, settings)
         context = await browser.new_context(
             locale=settings.browser_locale,
             user_agent=settings.browser_user_agent or None,

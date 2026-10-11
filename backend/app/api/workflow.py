@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.workflow_schemas import (
     HumanizeRequest,
     HumanizeResponse,
+    LiveRecordSessionOut,
+    LiveRecordStartRequest,
+    LiveRecordStopResponse,
     ParseCsvRequest,
     ParseCsvResponse,
     RecordingRequest,
@@ -30,7 +33,7 @@ from app.api.workflow_schemas import (
 from app.core.config import Settings
 from app.core.db import get_db
 from app.core.errors import ValidationError
-from app.workflow import codegen, params, record
+from app.workflow import codegen, live_record, params, record
 from app.workflow import service as workflow_service
 from app.workflow.schema import WorkflowDefinition
 
@@ -282,6 +285,70 @@ async def preview_steps(workflow: WorkflowDefinition) -> list[WorkflowStepPrevie
         )
         for index, step in enumerate(workflow.steps)
     ]
+
+
+@router.post(
+    "/workflows/recording/start",
+    response_model=LiveRecordSessionOut,
+    summary="Открыть браузер и начать живую запись действий",
+)
+async def start_live_recording(
+    payload: LiveRecordStartRequest,
+    request: Request,
+) -> LiveRecordSessionOut:
+    settings = _settings(request)
+    session = await live_record.start_recording(
+        settings,
+        payload.url,
+        headed=payload.headed,
+        dry=payload.dry or settings.env == "test",
+    )
+    return LiveRecordSessionOut(**live_record.session_snapshot(session))
+
+
+@router.get(
+    "/workflows/recording/{session_id}",
+    response_model=LiveRecordSessionOut,
+    summary="Текущие события живой записи",
+)
+async def get_live_recording(session_id: str) -> LiveRecordSessionOut:
+    session = live_record.get_session(session_id)
+    return LiveRecordSessionOut(**live_record.session_snapshot(session))
+
+
+@router.post(
+    "/workflows/recording/{session_id}/stop",
+    response_model=LiveRecordStopResponse,
+    summary="Остановить запись и собрать воркфлоу",
+)
+async def stop_live_recording(
+    session_id: str,
+    title: str = "Записанный сценарий",
+    humanize: bool = True,
+) -> LiveRecordStopResponse:
+    session = await live_record.stop_recording(session_id)
+    snapshot = live_record.session_snapshot(session)
+    workflow = None
+    summary: dict[str, Any] = {}
+    notes: list[str] = []
+    if session.events:
+        workflow = record.build_workflow_from_recording(
+            url=session.url,
+            title=title,
+            events=session.events,
+            humanize=humanize,
+        )
+        summary = record.recording_summary(workflow.steps)
+        notes = [
+            "События записаны из живого браузера",
+            "Значения полей по возможности заменены на {{column}}",
+        ]
+    return LiveRecordStopResponse(
+        session=LiveRecordSessionOut(**snapshot),
+        workflow=workflow,
+        summary=summary,
+        notes=notes,
+    )
 
 
 @router.post(
