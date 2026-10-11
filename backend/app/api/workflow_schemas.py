@@ -6,7 +6,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.workflow.schema import ActionStep, RowResult, WorkflowDefinition, WorkflowReport
+from app.workflow.schema import (
+    ActionStep,
+    RecordedEvent,
+    RowResult,
+    WorkflowDefinition,
+    WorkflowReport,
+)
 
 
 class WorkflowSaveRequest(BaseModel):
@@ -112,11 +118,41 @@ class WorkflowStepPreview(BaseModel):
     note: str | None = None
 
 
+class RecordingRequest(BaseModel):
+    """Собрать воркфлоу из записанных событий (codegen-подобный режим)."""
+
+    url: str
+    title: str = "Записанный сценарий"
+    events: list[RecordedEvent] = Field(default_factory=list)
+    humanize: bool = True
+
+
+class RecordingResponse(BaseModel):
+    workflow: WorkflowDefinition
+    summary: dict[str, Any] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+
+class HumanizeRequest(BaseModel):
+    workflow: WorkflowDefinition
+
+
+class HumanizeResponse(BaseModel):
+    workflow: WorkflowDefinition
+    summary: dict[str, Any] = Field(default_factory=dict)
+    changes: list[str] = Field(default_factory=list)
+
+
 # Реэкспорт для удобства OpenAPI.
 __all__ = [
     "ActionStep",
+    "HumanizeRequest",
+    "HumanizeResponse",
     "ParseCsvRequest",
     "ParseCsvResponse",
+    "RecordedEvent",
+    "RecordingRequest",
+    "RecordingResponse",
     "RowResult",
     "WorkflowDefinition",
     "WorkflowDryRunRequest",

@@ -7,6 +7,7 @@ import {
   ACTION_LABELS,
   type ActionStep,
   type ActionType,
+  type RecordedEvent,
   type WorkflowDefinition,
   type WorkflowReport,
 } from '../api/workflowTypes'
@@ -23,6 +24,9 @@ const ACTION_OPTIONS: ActionType[] = [
   'assert_text',
   'assert_element',
   'extract',
+  'upload_file',
+  'loop',
+  'if',
   'screenshot',
 ]
 
@@ -31,11 +35,18 @@ const DEFAULT_CSV = `name,email,city
 Мария,maria@example.com,spb
 `
 
+const DEFAULT_EVENTS = `[
+  {"type": "goto", "url": "https://example.com/form"},
+  {"type": "fill", "selector": "#field-name", "value": "Иван", "name": "name"},
+  {"type": "fill", "selector": "#field-email", "value": "ivan@example.com"},
+  {"type": "click", "selector": "#btn-submit", "text": "Отправить", "input_type": "submit"}
+]`
+
 function emptyStep(type: ActionType = 'fill'): ActionStep {
   return { type, selector: '', value: '', url: '', confirm_required: false }
 }
 
-/** Воркфлоу ввода: шаги, CSV-параметры, dry-run и экспорт скрипта. */
+/** Воркфлоу ввода: шаги, запись, CSV/XLSX, dry-run и экспорт скрипта. */
 export function WorkflowPage() {
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
@@ -53,6 +64,7 @@ export function WorkflowPage() {
     { type: 'click', selector: '#btn-submit', confirm_required: true, note: 'отправка' },
   ])
   const [csvText, setCsvText] = useState(DEFAULT_CSV)
+  const [eventsJson, setEventsJson] = useState(DEFAULT_EVENTS)
   const [scenarioId, setScenarioId] = useState<string | null>(null)
   const [report, setReport] = useState<WorkflowReport | null>(null)
   const [script, setScript] = useState<string | null>(null)
@@ -74,6 +86,8 @@ export function WorkflowPage() {
         selector: step.selector || null,
         value: step.value || null,
         url: step.url || null,
+        path: step.path || null,
+        condition: step.condition || null,
       })),
       max_rows: 100,
       require_confirm_submit: true,
@@ -165,6 +179,47 @@ export function WorkflowPage() {
     },
   })
 
+  const applyRecording = useMutation({
+    mutationFn: async () => {
+      let events: RecordedEvent[]
+      try {
+        events = JSON.parse(eventsJson) as RecordedEvent[]
+      } catch {
+        throw new Error('JSON событий записи некорректен')
+      }
+      return api.workflowFromRecording({
+        url,
+        title,
+        events,
+        humanize: true,
+      })
+    },
+    onSuccess: (result) => {
+      setSteps(result.workflow.steps)
+      setUrl(result.workflow.url)
+      setTitle(result.workflow.title)
+      setNotice(
+        `Из записи: ${result.summary.steps ?? result.workflow.steps.length} шагов. ${(result.notes || []).join(' ')}`,
+      )
+      setError(null)
+    },
+    onError: (err: unknown) => {
+      setError(err instanceof ApiError ? err.message : String(err))
+    },
+  })
+
+  const humanize = useMutation({
+    mutationFn: () => api.humanizeWorkflow(workflow),
+    onSuccess: (result) => {
+      setSteps(result.workflow.steps)
+      setNotice(`Очеловечено: ${result.changes.join('; ')}`)
+      setError(null)
+    },
+    onError: (err: unknown) => {
+      setError(err instanceof ApiError ? err.message : String(err))
+    },
+  })
+
   function updateStep(index: number, patch: Partial<ActionStep>) {
     setSteps((prev) => prev.map((step, i) => (i === index ? { ...step, ...patch } : step)))
   }
@@ -179,11 +234,57 @@ export function WorkflowPage() {
     setNotice('Скрипт скопирован в буфер')
   }
 
+  async function onXlsxSelected(file: File | null) {
+    if (!file) return
+    try {
+      const parsed = await api.parseWorkflowXlsx(file)
+      const header = parsed.columns.join(',')
+      const body = parsed.rows.map((row) => parsed.columns.map((col) => row[col] ?? '').join(','))
+      setCsvText([header, ...body].join('\n'))
+      setNotice(`XLSX: загружено ${parsed.count} строк`)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err))
+    }
+  }
+
+  function valuePlaceholder(type: ActionType): string {
+    if (type === 'goto') return 'url'
+    if (type === 'upload_file') return 'path или {{file}}'
+    if (type === 'if') return 'exists:#sel | text:… | column:name'
+    if (type === 'loop') return 'loop_times или имя колонки'
+    return '{{column}}'
+  }
+
+  function valueOf(step: ActionStep): string {
+    if (step.type === 'goto') return step.url ?? step.value ?? ''
+    if (step.type === 'upload_file') return step.path ?? step.value ?? ''
+    if (step.type === 'if') return step.condition ?? ''
+    if (step.type === 'loop') {
+      return step.loop_over ?? (step.loop_times != null ? String(step.loop_times) : '')
+    }
+    return step.value ?? ''
+  }
+
+  function setValue(index: number, type: ActionType, raw: string) {
+    if (type === 'goto') updateStep(index, { url: raw })
+    else if (type === 'upload_file') updateStep(index, { path: raw })
+    else if (type === 'if') updateStep(index, { condition: raw })
+    else if (type === 'loop') {
+      const asNumber = Number(raw)
+      if (raw && Number.isFinite(asNumber) && String(asNumber) === raw.trim()) {
+        updateStep(index, { loop_times: asNumber, loop_over: null })
+      } else {
+        updateStep(index, { loop_over: raw || null, loop_times: null })
+      }
+    } else updateStep(index, { value: raw })
+  }
+
   return (
     <div className="grid">
       <Card
         title="Воркфлоу ввода"
-        subtitle="Шаги действий, параметры из CSV, сухой прогон без отправки и экспорт в Playwright."
+        subtitle="Шаги, запись действий, CSV/XLSX, dry-run без отправки и экспорт Playwright."
       >
         {error ? <p className="error-text">{error}</p> : null}
         {notice ? <p className="muted">{notice}</p> : null}
@@ -266,6 +367,9 @@ export function WorkflowPage() {
           >
             Экспорт .py
           </button>
+          <button className="btn" disabled={humanize.isPending} onClick={() => humanize.mutate()}>
+            Очеловечить
+          </button>
           <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input
               type="checkbox"
@@ -285,8 +389,29 @@ export function WorkflowPage() {
       </Card>
 
       <Card
+        title="Запись действий"
+        subtitle="Вставьте JSON событий (codegen-подобный режим). UPA соберёт шаги и подставит {{column}}."
+        actions={
+          <button
+            className="btn"
+            disabled={applyRecording.isPending}
+            onClick={() => applyRecording.mutate()}
+          >
+            {applyRecording.isPending ? 'Собираю…' : 'Применить запись'}
+          </button>
+        }
+      >
+        <textarea
+          className="input"
+          style={{ width: '100%', minHeight: 140, fontFamily: 'ui-monospace, monospace' }}
+          value={eventsJson}
+          onChange={(e) => setEventsJson(e.target.value)}
+        />
+      </Card>
+
+      <Card
         title="Шаги"
-        subtitle="Подстановки {{column}} берутся из CSV. Опасные click в dry-run пропускаются."
+        subtitle="Подстановки {{column}} из CSV. loop/if — через значение; опасные click в dry-run пропускаются."
         actions={
           <button className="btn" onClick={() => setSteps((prev) => [...prev, emptyStep()])}>
             + Шаг
@@ -299,7 +424,7 @@ export function WorkflowPage() {
               <th>#</th>
               <th>Действие</th>
               <th>Селектор</th>
-              <th>Значение / URL</th>
+              <th>Значение / условие</th>
               <th>Опасно</th>
               <th />
             </tr>
@@ -312,7 +437,19 @@ export function WorkflowPage() {
                   <select
                     className="input"
                     value={step.type}
-                    onChange={(e) => updateStep(index, { type: e.target.value as ActionType })}
+                    onChange={(e) => {
+                      const type = e.target.value as ActionType
+                      const patch: Partial<ActionStep> = { type }
+                      if (type === 'loop' && !step.children?.length) {
+                        patch.loop_times = step.loop_times ?? 2
+                        patch.children = [emptyStep('assert_element')]
+                      }
+                      if (type === 'if' && !step.children?.length) {
+                        patch.condition = step.condition || 'exists:#field-name'
+                        patch.children = [emptyStep('fill')]
+                      }
+                      updateStep(index, patch)
+                    }}
                   >
                     {ACTION_OPTIONS.map((type) => (
                       <option key={type} value={type}>
@@ -327,20 +464,15 @@ export function WorkflowPage() {
                     placeholder="селектор"
                     value={step.selector ?? ''}
                     onChange={(e) => updateStep(index, { selector: e.target.value })}
+                    disabled={step.type === 'goto' || step.type === 'loop' || step.type === 'if'}
                   />
                 </td>
                 <td>
                   <input
                     className="input"
-                    placeholder={step.type === 'goto' ? 'url' : '{{column}}'}
-                    value={
-                      step.type === 'goto' ? (step.url ?? step.value ?? '') : (step.value ?? '')
-                    }
-                    onChange={(e) =>
-                      step.type === 'goto'
-                        ? updateStep(index, { url: e.target.value })
-                        : updateStep(index, { value: e.target.value })
-                    }
+                    placeholder={valuePlaceholder(step.type)}
+                    value={valueOf(step)}
+                    onChange={(e) => setValue(index, step.type, e.target.value)}
                   />
                 </td>
                 <td>
@@ -361,7 +493,21 @@ export function WorkflowPage() {
         </table>
       </Card>
 
-      <Card title="Параметры (CSV)" subtitle="Первая строка — заголовки колонок для {{подстановок}}.">
+      <Card
+        title="Параметры"
+        subtitle="CSV вручную или загрузите XLSX — колонки станут {{подстановками}}."
+        actions={
+          <label className="btn" style={{ cursor: 'pointer' }}>
+            XLSX…
+            <input
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              hidden
+              onChange={(e) => void onXlsxSelected(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        }
+      >
         <textarea
           className="input"
           style={{ width: '100%', minHeight: 120, fontFamily: 'ui-monospace, monospace' }}
@@ -396,9 +542,11 @@ export function WorkflowPage() {
                   <td>{row.skipped.join(', ') || '—'}</td>
                   <td className="muted">
                     {row.error ||
-                      (Object.keys(row.extracted).length
-                        ? JSON.stringify(row.extracted)
-                        : row.log.slice(-2).join(' · '))}
+                      (row.form_errors && row.form_errors.length
+                        ? row.form_errors.join('; ')
+                        : Object.keys(row.extracted).length
+                          ? JSON.stringify(row.extracted)
+                          : row.log.slice(-2).join(' · '))}
                   </td>
                 </tr>
               ))}

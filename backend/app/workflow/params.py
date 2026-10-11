@@ -1,10 +1,11 @@
-"""Параметры воркфлоу: CSV/JSON и подстановка {{column}}."""
+"""Параметры воркфлоу: CSV/JSON/XLSX и подстановка {{column}}."""
 
 from __future__ import annotations
 
 import csv
 import io
 import re
+from pathlib import Path
 from typing import Any
 
 from app.core.errors import ValidationError
@@ -75,6 +76,50 @@ def substitute(template: str | None, row: dict[str, str]) -> str | None:
             details={"missing": sorted(set(missing))},
         )
     return result
+
+
+def parse_rows_xlsx(data: bytes) -> list[dict[str, str]]:
+    """Разбирает первую книгу XLSX (openpyxl) в список словарей."""
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:  # pragma: no cover
+        raise ValidationError("openpyxl не установлен") from exc
+
+    if not data:
+        raise ValidationError("XLSX пуст")
+    workbook = load_workbook(filename=io.BytesIO(data), read_only=True, data_only=True)
+    sheet = workbook.active
+    if sheet is None:
+        raise ValidationError("В XLSX нет листа")
+    rows_iter = sheet.iter_rows(values_only=True)
+    try:
+        header = next(rows_iter)
+    except StopIteration as exc:
+        raise ValidationError("В XLSX нет заголовка") from exc
+    columns = [str(cell).strip() if cell is not None else "" for cell in header]
+    if not any(columns):
+        raise ValidationError("В XLSX пустой заголовок")
+
+    rows: list[dict[str, str]] = []
+    for index, values in enumerate(rows_iter):
+        cleaned: dict[str, str] = {}
+        for col_index, column in enumerate(columns):
+            if not column:
+                continue
+            raw = values[col_index] if col_index < len(values) else None
+            cleaned[column] = "" if raw is None else str(raw).strip()
+        if not any(cleaned.values()):
+            continue
+        rows.append(cleaned)
+        if index > 10_000:
+            raise ValidationError("Слишком много строк в XLSX")
+    if not rows:
+        raise ValidationError("В XLSX нет данных")
+    return rows
+
+
+def parse_rows_xlsx_path(path: str | Path) -> list[dict[str, str]]:
+    return parse_rows_xlsx(Path(path).read_bytes())
 
 
 def limit_rows(rows: list[dict[str, str]], max_rows: int) -> list[dict[str, str]]:

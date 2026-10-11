@@ -56,7 +56,10 @@ import type {
   RunRequest,
 } from './runTypes'
 import type {
+  HumanizeResponse,
   ParseCsvResponse,
+  RecordedEvent,
+  RecordingResponse,
   WorkflowDefinition,
   WorkflowExportResponse,
   WorkflowOut,
@@ -380,6 +383,37 @@ export const api = {
   }) => post<WorkflowExportResponse>(`${API_PREFIX}/workflows/export-script`, payload),
   parseWorkflowCsv: (csv_text: string, delimiter = ',') =>
     post<ParseCsvResponse>(`${API_PREFIX}/workflows/parse-csv`, { csv_text, delimiter }),
+  parseWorkflowXlsx: async (file: File) => {
+    const body = new FormData()
+    body.append('file', file)
+    const response = await fetch(`${API_PREFIX}/workflows/parse-xlsx`, {
+      method: 'POST',
+      body,
+    })
+    if (!response.ok) {
+      let payload: ApiErrorBody = {
+        code: 'http_error',
+        message: response.statusText,
+        details: {},
+      }
+      try {
+        const json = (await response.json()) as { error?: ApiErrorBody }
+        if (json.error) payload = json.error
+      } catch {
+        /* keep fallback */
+      }
+      throw new ApiError(response.status, payload)
+    }
+    return (await response.json()) as ParseCsvResponse
+  },
+  workflowFromRecording: (payload: {
+    url: string
+    title?: string
+    events: RecordedEvent[]
+    humanize?: boolean
+  }) => post<RecordingResponse>(`${API_PREFIX}/workflows/from-recording`, payload),
+  humanizeWorkflow: (workflow: WorkflowDefinition) =>
+    post<HumanizeResponse>(`${API_PREFIX}/workflows/humanize`, { workflow }),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */

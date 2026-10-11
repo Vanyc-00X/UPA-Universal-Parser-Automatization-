@@ -75,8 +75,8 @@ FEATURES: list[FeatureStatus] = [
         key="form_fill",
         title="Автоматизация ввода",
         stage="7",
-        status="in_progress",
-        description="Действия, dry-run, CSV-параметры, экспорт Python-скрипта Playwright",
+        status="done",
+        description="Действия, запись, dry-run, CSV/XLSX, экспорт Playwright-скрипта",
     ),
     FeatureStatus(
         key="packaging",
@@ -172,10 +172,11 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="7",
         title="Автоматизация ввода",
-        status="in_progress",
+        status="done",
         items=[
-            "действия goto/fill/click/select/assert",
-            "параметризация CSV/JSON и dry-run",
+            "действия включая upload/loop/if",
+            "запись событий и очеловечивание шагов",
+            "параметризация CSV/XLSX и dry-run",
             "экспорт в Python-скрипт Playwright",
             "подтверждение опасных отправок",
         ],
@@ -183,12 +184,12 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="8",
         title="Упаковка и документация",
-        status="planned",
+        status="in_progress",
         items=["лаунчер", "онбординг", "документация"],
     ),
 ]
 
-CURRENT_STAGE = "7"
+CURRENT_STAGE = "8"
 
 
 def _settings(request: Request) -> Settings:

@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.workflow_schemas import (
+    HumanizeRequest,
+    HumanizeResponse,
     ParseCsvRequest,
     ParseCsvResponse,
+    RecordingRequest,
+    RecordingResponse,
     WorkflowDryRunRequest,
     WorkflowExportDraftRequest,
     WorkflowExportRequest,
@@ -26,7 +30,7 @@ from app.api.workflow_schemas import (
 from app.core.config import Settings
 from app.core.db import get_db
 from app.core.errors import ValidationError
-from app.workflow import codegen, params
+from app.workflow import codegen, params, record
 from app.workflow import service as workflow_service
 from app.workflow.schema import WorkflowDefinition
 
@@ -278,3 +282,71 @@ async def preview_steps(workflow: WorkflowDefinition) -> list[WorkflowStepPrevie
         )
         for index, step in enumerate(workflow.steps)
     ]
+
+
+@router.post(
+    "/workflows/from-recording",
+    response_model=RecordingResponse,
+    summary="Собрать воркфлоу из записанных событий",
+    description=(
+        "Codegen-подобный режим: сырые действия пользователя превращаются в шаги. "
+        "При humanize=true селекторы укорачиваются, значения fill заменяются на {{column}}, "
+        "кнопки отправки помечаются как опасные."
+    ),
+)
+async def from_recording(payload: RecordingRequest) -> RecordingResponse:
+    if not payload.events:
+        raise ValidationError("Список событий записи пуст")
+    workflow = record.build_workflow_from_recording(
+        url=payload.url,
+        title=payload.title,
+        events=payload.events,
+        humanize=payload.humanize,
+    )
+    notes = [
+        "Склеены подряд идущие fill/select по одному селектору",
+        "Значения полей по возможности заменены на {{column}}",
+        "Клик по submit помечен confirm_required",
+    ]
+    if not payload.humanize:
+        notes = ["Шаги собраны без очеловечивания"]
+    return RecordingResponse(
+        workflow=workflow,
+        summary=record.recording_summary(workflow.steps),
+        notes=notes,
+    )
+
+
+@router.post(
+    "/workflows/humanize",
+    response_model=HumanizeResponse,
+    summary="Очеловечить шаги воркфлоу (правила + короткие селекторы)",
+)
+async def humanize_workflow(payload: HumanizeRequest) -> HumanizeResponse:
+    before = [step.model_dump(mode="json") for step in payload.workflow.steps]
+    workflow = record.humanize_workflow(payload.workflow)
+    after = [step.model_dump(mode="json") for step in workflow.steps]
+    changes: list[str] = []
+    if before != after:
+        changes.append("обновлены селекторы/значения/флаги опасности")
+    if len(before) != len(after):
+        changes.append(f"шагов было {len(before)}, стало {len(after)}")
+    if not changes:
+        changes.append("изменений нет")
+    return HumanizeResponse(
+        workflow=workflow,
+        summary=record.recording_summary(workflow.steps),
+        changes=changes,
+    )
+
+
+@router.post(
+    "/workflows/parse-xlsx",
+    response_model=ParseCsvResponse,
+    summary="Разобрать XLSX параметров в строки",
+)
+async def parse_xlsx(file: UploadFile = File(...)) -> ParseCsvResponse:
+    data = await file.read()
+    rows = params.parse_rows_xlsx(data)
+    columns = list(rows[0].keys()) if rows else []
+    return ParseCsvResponse(rows=rows, columns=columns, count=len(rows))

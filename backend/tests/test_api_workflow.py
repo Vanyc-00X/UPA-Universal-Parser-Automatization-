@@ -166,3 +166,63 @@ async def test_preview_steps(client: httpx.AsyncClient) -> None:
     assert len(steps) == 8
     assert any("page.fill" in step["playwright"] for step in steps)
     assert steps[-1]["dangerous"] is True
+
+
+async def test_from_recording_and_humanize(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/workflows/from-recording",
+        json={
+            "url": FORM_URL,
+            "title": "Из записи",
+            "humanize": True,
+            "events": [
+                {"type": "goto", "url": FORM_URL},
+                {"type": "fill", "selector": "#field-name", "value": "Иван", "name": "name"},
+                {"type": "fill", "selector": "#field-email", "value": "a@b.c"},
+                {
+                    "type": "click",
+                    "selector": "#btn-submit",
+                    "text": "Отправить",
+                    "input_type": "submit",
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    workflow = response.json()["workflow"]
+    assert workflow["steps"][1]["value"] == "{{name}}"
+    assert workflow["steps"][-1]["confirm_required"] is True
+
+    humanized = await client.post(
+        "/api/v1/workflows/humanize",
+        json={"workflow": workflow},
+    )
+    assert humanized.status_code == 200
+    assert "summary" in humanized.json()
+
+
+async def test_parse_xlsx_endpoint(client: httpx.AsyncClient) -> None:
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["name", "city"])
+    sheet.append(["Иван", "msk"])
+    buffer = BytesIO()
+    workbook.save(buffer)
+    response = await client.post(
+        "/api/v1/workflows/parse-xlsx",
+        files={
+            "file": (
+                "params.xlsx",
+                buffer.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["count"] == 1
+    assert payload["rows"][0]["name"] == "Иван"

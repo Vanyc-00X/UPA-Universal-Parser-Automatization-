@@ -117,9 +117,9 @@ async def run_workflow(
     """Прогоняет воркфлоу по строкам. При persist=True сохраняет запуск."""
     rows = params.limit_rows(rows, definition.max_rows)
 
-    if len(definition.steps) > definition.max_actions:
+    if definition.total_actions() > definition.max_actions:
         raise ValidationError(
-            f"Слишком много шагов: {len(definition.steps)} > {definition.max_actions}"
+            f"Слишком много шагов: {definition.total_actions()} > {definition.max_actions}"
         )
 
     if mode == "live" and definition.require_confirm_submit:

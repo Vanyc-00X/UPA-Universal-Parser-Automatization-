@@ -12,16 +12,24 @@ export type ActionType =
   | 'assert_element'
   | 'screenshot'
   | 'extract'
+  | 'upload_file'
+  | 'loop'
+  | 'if'
 
 export interface ActionStep {
   type: ActionType
   selector?: string | null
   value?: string | null
   url?: string | null
+  path?: string | null
   key?: string | null
   timeout_ms?: number
   confirm_required?: boolean
   note?: string | null
+  condition?: string | null
+  loop_times?: number | null
+  loop_over?: string | null
+  children?: ActionStep[]
 }
 
 export interface WorkflowDefinition {
@@ -68,6 +76,7 @@ export interface RowResult {
   extracted: Record<string, unknown>
   skipped: string[]
   log: string[]
+  form_errors?: string[]
 }
 
 export interface WorkflowReport {
@@ -97,6 +106,45 @@ export interface ParseCsvResponse {
   count: number
 }
 
+export type RecordedEventType =
+  | 'goto'
+  | 'fill'
+  | 'click'
+  | 'select'
+  | 'check'
+  | 'press'
+  | 'upload_file'
+  | 'assert_text'
+  | 'assert_element'
+  | 'extract'
+  | 'wait_for'
+  | 'screenshot'
+
+export interface RecordedEvent {
+  type: RecordedEventType
+  selector?: string | null
+  value?: string | null
+  url?: string | null
+  path?: string | null
+  key?: string | null
+  tag?: string | null
+  text?: string | null
+  name?: string | null
+  input_type?: string | null
+}
+
+export interface RecordingResponse {
+  workflow: WorkflowDefinition
+  summary: Record<string, unknown>
+  notes: string[]
+}
+
+export interface HumanizeResponse {
+  workflow: WorkflowDefinition
+  summary: Record<string, unknown>
+  changes: string[]
+}
+
 export const ACTION_LABELS: Record<ActionType, string> = {
   goto: 'Перейти',
   fill: 'Заполнить',
@@ -109,4 +157,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   assert_element: 'Проверить элемент',
   screenshot: 'Скриншот',
   extract: 'Извлечь',
+  upload_file: 'Файл',
+  loop: 'Цикл',
+  if: 'Условие',
 }

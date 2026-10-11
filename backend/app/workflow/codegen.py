@@ -20,6 +20,7 @@ _SCRIPT_TEMPLATE = r'''#!/usr/bin/env python3
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE_URL = __BASE_URL__
@@ -41,12 +42,47 @@ def substitute(template, row):
     return TEMPLATE_RE.sub(replacer, template)
 
 
-def run_row(page, row):
-    for step in STEPS:
+def eval_condition(page, condition, row, extracted):
+    condition = (condition or "").strip()
+    if condition.startswith("exists:"):
+        return page.locator(condition[7:].strip()).count() > 0
+    if condition.startswith("missing:"):
+        return page.locator(condition[8:].strip()).count() == 0
+    if condition.startswith("text:"):
+        return condition[5:] in page.content()
+    if condition.startswith("column:"):
+        return bool((row.get(condition[7:].strip()) or "").strip())
+    if condition.startswith("equals:") and "=" in condition[7:]:
+        key, expected = condition[7:].split("=", 1)
+        actual = extracted.get(key.strip(), row.get(key.strip()))
+        return str(actual) == expected
+    return condition in page.content()
+
+
+def run_steps(page, steps, row, extracted):
+    for step in steps:
         action = step["type"]
+        if action == "if":
+            if eval_condition(page, step.get("condition"), row, extracted):
+                run_steps(page, step.get("children") or [], row, extracted)
+            continue
+        if action == "loop":
+            if step.get("loop_over"):
+                raw = row.get(step["loop_over"]) or ""
+                items = [p.strip() for p in raw.split(",") if p.strip()] or [""]
+            else:
+                items = [str(i) for i in range(int(step.get("loop_times") or 1))]
+            for item_index, item in enumerate(items):
+                nested = dict(row)
+                nested["_index"] = str(item_index)
+                nested["_item"] = item
+                run_steps(page, step.get("children") or [], nested, extracted)
+            continue
+
         selector = substitute(step.get("selector"), row)
         value = substitute(step.get("value"), row)
         url = substitute(step.get("url"), row)
+        path = substitute(step.get("path"), row)
 
         if action == "goto":
             page.goto(url or value or BASE_URL, wait_until="domcontentloaded")
@@ -71,7 +107,15 @@ def run_row(page, row):
             page.screenshot(path=f"upa_{row.get('id', 'row')}.png", full_page=True)
         elif action == "extract":
             text = page.locator(selector).inner_text()
-            print("extract", step.get("key") or selector, text)
+            key = step.get("key") or selector
+            extracted[key] = text
+            print("extract", key, text)
+        elif action == "upload_file":
+            page.set_input_files(selector, str(Path(path or value or "")))
+
+
+def run_row(page, row):
+    run_steps(page, STEPS, row, {})
 
 
 def main():
@@ -134,4 +178,11 @@ def step_to_playwright_line(step: ActionStep) -> str:
         return 'page.screenshot(path="upa.png", full_page=True)'
     if step.type is ActionType.EXTRACT:
         return f"page.locator({step.selector!r}).inner_text()"
+    if step.type is ActionType.UPLOAD_FILE:
+        return f"page.set_input_files({step.selector!r}, {step.path or step.value!r})"
+    if step.type is ActionType.IF:
+        return f"if {step.condition}: ({len(step.children)} steps)"
+    if step.type is ActionType.LOOP:
+        target = step.loop_over or f"×{step.loop_times}"
+        return f"loop {target}: ({len(step.children)} steps)"
     return f"# {step.type.value}"
