@@ -449,6 +449,11 @@ def analyze_document(document: Document, *, max_elements: int = 200) -> PageAnal
             description=description,
         )
         element.repeat_signature = group.signature
+        # Полный размер списка уже в count; здесь — сколько осталось в обрезанном
+        # DOM и сколько скрыто. Без этих чисел редактор показывал бы «12 записей»,
+        # хотя селектор находит три.
+        element.items_in_dom = group.count
+        element.collapsed = group.collapsed
         element.sample = group.items[0].all_text(limit=80) if group.items else None
         elements.append(element)
         seen_paths.add(container.css_path())
@@ -486,6 +491,10 @@ def analyze_document(document: Document, *, max_elements: int = 200) -> PageAnal
                             tag_override=tag_value,
                         )
                     )
+                    # Поле повторяется столько раз, сколько записей дошло до
+                    # обрезанного DOM: это нужно редактору, чтобы отличить
+                    # «селектор ничего не находит» от «нашёл всё, что есть».
+                    elements[-1].items_in_dom = group.count
                     break
 
     # --- Поля ввода и формы -------------------------------------------------

@@ -546,6 +546,11 @@ class Element:
     attrs: dict[str, str] = field(default_factory=dict)
     # Для контейнеров повторов: сколько элементов внутри и их подпись.
     repeat_signature: str | None = None
+    # Сколько записей осталось в обрезанном DOM и сколько скрыто обрезкой.
+    # В карте нужно и полное число (``count``), и это: иначе редактор показывал бы
+    # «12 записей», хотя селектор находит три.
+    items_in_dom: int | None = None
+    collapsed: int | None = None
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -557,6 +562,8 @@ class Element:
             "selector_quality": round(selector_quality(self.candidates), 3),
             "confidence": round(self.confidence, 3),
             "count": self.count,
+            "items_in_dom": self.items_in_dom,
+            "collapsed": self.collapsed,
             "sample": self.sample,
             "tag": self.tag,
             "source": self.source,

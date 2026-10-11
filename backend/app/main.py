@@ -14,6 +14,7 @@ from app.api.errors import register_error_handlers
 from app.core.config import Settings, get_settings
 from app.core.db import dispose_engine, init_engine
 from app.core.logging import configure_logging, get_logger
+from app.core.migrations import upgrade_to_head
 
 log = get_logger(__name__)
 
@@ -31,6 +32,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Инициализация и освобождение ресурсов приложения."""
     settings: Settings = app.state.settings
     settings.ensure_directories()
+    # Схема обновляется миграциями: create_all не добавил бы новые колонки в
+    # существующие таблицы, и приложение стартовало бы на устаревшей базе.
+    upgrade_to_head(settings)
     init_engine(settings)
     log.info(
         "app.startup",

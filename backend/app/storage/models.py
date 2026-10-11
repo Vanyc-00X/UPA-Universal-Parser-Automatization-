@@ -173,6 +173,10 @@ class ElementMap(TimestampMixin, Base):
     prompt_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     edited_by_user: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Черновик сценария, который пользователь собирает в визуальном редакторе.
+    # Хранится в БД, а не в памяти процесса: правки не должны теряться при
+    # перезапуске приложения или обновлении страницы.
+    edit_draft: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     snapshot: Mapped[Snapshot] = relationship(back_populates="element_map")
 

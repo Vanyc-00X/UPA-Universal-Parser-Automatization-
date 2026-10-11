@@ -47,8 +47,8 @@ FEATURES: list[FeatureStatus] = [
         key="visual_editor",
         title="Визуальный редактор элементов",
         stage="3",
-        status="planned",
-        description="Пользователь исправляет карту без знания CSS",
+        status="done",
+        description="Инспектор страницы, проверка селекторов, правка полей и сохранение сценария",
     ),
     FeatureStatus(
         key="extraction",
@@ -116,7 +116,7 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="2",
         title="Анализ: карта элементов и ИИ-описания",
-        status="in_progress",
+        status="done",
         items=[
             "лёгкий DOM-парсер",
             "детерминированный предпроход",
@@ -128,8 +128,13 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="3",
         title="Визуальный редактор элементов",
-        status="planned",
-        items=["overlay-инспектор", "панель ролей", "валидация селектора"],
+        status="in_progress",
+        items=[
+            "инспектор страницы с рамками",
+            "проверка селекторов на живом DOM",
+            "черновик сценария и правка полей",
+            "сохранение сценария с версиями",
+        ],
     ),
     StageInfo(
         key="4",
@@ -163,7 +168,7 @@ STAGES: list[StageInfo] = [
     ),
 ]
 
-CURRENT_STAGE = "3"
+CURRENT_STAGE = "4"
 
 
 def _settings(request: Request) -> Settings:

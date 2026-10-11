@@ -16,19 +16,12 @@ log = get_logger("upa.cli")
 
 
 def _cmd_init_db(_args: argparse.Namespace) -> int:
-    """Создаёт схему БД и каталоги данных."""
-    from app.storage import Base
+    """Приводит схему БД к актуальной версии через миграции."""
+    from app.core.migrations import upgrade_to_head
 
     settings = get_settings()
     settings.ensure_directories()
-    engine = init_engine(settings)
-
-    async def _run() -> None:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        await dispose_engine()
-
-    asyncio.run(_run())
+    upgrade_to_head(settings)
     print(f"Схема БД готова: {settings.database_path}")
     print(f"Каталог данных: {settings.data_dir}")
     return 0

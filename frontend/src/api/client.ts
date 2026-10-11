@@ -31,6 +31,23 @@ import type {
   ReportResponse,
   RolesResponse,
 } from './analyzeTypes'
+import type {
+  EditorStateResponse,
+  ElementAddRequest,
+  FieldAddRequest,
+  FieldUpdateRequest,
+  InspectorResponse,
+  PlanUpdateRequest,
+  PreviewResponse,
+  ScenarioSavedResponse,
+  SelectorReportOut,
+} from './editorTypes'
+import type {
+  SaveScenarioRequest,
+  ScenarioDefinition,
+  ScenarioListResponse,
+  ScenarioVersionOut,
+} from './scenarioTypes'
 
 const API_PREFIX = '/api/v1'
 
@@ -151,6 +168,65 @@ export const api = {
   report: (snapshotId: string) =>
     request<ReportResponse>(`${API_PREFIX}/snapshots/${snapshotId}/report`),
   roles: () => request<RolesResponse>(`${API_PREFIX}/roles`),
+
+  // --- Этап 3: визуальный редактор ---------------------------------------
+  inspector: (snapshotId: string, maxNodes = 400) =>
+    request<InspectorResponse>(
+      `${API_PREFIX}/snapshots/${snapshotId}/inspector${query({ max_nodes: maxNodes })}`,
+    ),
+  testSelector: (snapshotId: string, selector: string) =>
+    post<SelectorReportOut>(`${API_PREFIX}/snapshots/${snapshotId}/element-selector`, {
+      selector,
+    }),
+  draft: (snapshotId: string) =>
+    request<EditorStateResponse>(`${API_PREFIX}/snapshots/${snapshotId}/draft`),
+  putDraft: (snapshotId: string, definition: ScenarioDefinition) =>
+    request<EditorStateResponse>(`${API_PREFIX}/snapshots/${snapshotId}/draft`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ definition }),
+    }),
+  resetDraft: (snapshotId: string) =>
+    post<EditorStateResponse>(`${API_PREFIX}/snapshots/${snapshotId}/draft/reset`, {}),
+  suggestKey: (snapshotId: string, title: string) =>
+    post<{ key: string }>(
+      `${API_PREFIX}/snapshots/${snapshotId}/draft/suggest-key${query({ title })}`,
+      {},
+    ),
+  addField: (snapshotId: string, payload: FieldAddRequest) =>
+    post<EditorStateResponse>(`${API_PREFIX}/snapshots/${snapshotId}/draft/fields`, payload),
+  addFieldFromElement: (snapshotId: string, payload: ElementAddRequest) =>
+    post<EditorStateResponse>(
+      `${API_PREFIX}/snapshots/${snapshotId}/draft/fields/from-element`,
+      payload,
+    ),
+  updateField: (snapshotId: string, payload: FieldUpdateRequest) =>
+    request<EditorStateResponse>(`${API_PREFIX}/snapshots/${snapshotId}/draft/fields`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  removeField: (snapshotId: string, key: string) =>
+    del<EditorStateResponse>(`${API_PREFIX}/snapshots/${snapshotId}/draft/fields/${key}`),
+  orderFields: (snapshotId: string, order: string[]) =>
+    post<EditorStateResponse>(`${API_PREFIX}/snapshots/${snapshotId}/draft/order`, { order }),
+  updatePlan: (snapshotId: string, payload: PlanUpdateRequest) =>
+    request<EditorStateResponse>(`${API_PREFIX}/snapshots/${snapshotId}/draft/plan`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  previewDraft: (snapshotId: string) =>
+    request<PreviewResponse>(`${API_PREFIX}/snapshots/${snapshotId}/draft/preview`),
+  saveAsScenario: (snapshotId: string, payload: SaveScenarioRequest) =>
+    post<ScenarioSavedResponse>(
+      `${API_PREFIX}/snapshots/${snapshotId}/draft/save-as-scenario`,
+      payload,
+    ),
+  scenarios: (params: { site_id?: string; limit?: number } = {}) =>
+    request<ScenarioListResponse>(`${API_PREFIX}/scenarios${query(params)}`),
+  scenarioVersions: (scenarioId: string) =>
+    request<ScenarioVersionOut[]>(`${API_PREFIX}/scenarios/${scenarioId}/versions`),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */
@@ -169,4 +245,9 @@ export const queryKeys = {
   elementMap: (snapshotId: string) => ['element-map', snapshotId] as const,
   elementMaps: ['element-maps'] as const,
   roles: ['roles'] as const,
+  inspector: (snapshotId: string) => ['inspector', snapshotId] as const,
+  draft: (snapshotId: string) => ['draft', snapshotId] as const,
+  preview: (snapshotId: string) => ['preview', snapshotId] as const,
+  scenarios: (siteId?: string) => ['scenarios', siteId ?? 'all'] as const,
+  scenarioVersions: (scenarioId: string) => ['scenario-versions', scenarioId] as const,
 }

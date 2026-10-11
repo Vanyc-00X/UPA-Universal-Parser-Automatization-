@@ -55,6 +55,40 @@ class ValidationError(UPAError):
     message = "Некорректные данные запроса"
 
 
+class ModelValidationError(UPAError):
+    """Ошибка проверки модели Pydantic — с понятным первым замечанием.
+
+    Используется там, где тело запроса разбирается вложенной моделью: FastAPI
+    поднимает ``pydantic.ValidationError``, и без явного обработчика ответ был бы
+    невнятным или превращался в 500.
+    """
+
+    code = "validation_error"
+    http_status = 422
+    message = "Данные не прошли проверку"
+
+    @classmethod
+    def from_pydantic(cls, exc: Exception, message: str | None = None) -> ModelValidationError:
+        details: dict[str, Any] = {}
+        errors = getattr(exc, "errors", None)
+        if callable(errors):
+            try:
+                items = errors()
+            except Exception:  # noqa: BLE001 — чужая ошибка не должна ломать обработку
+                items = []
+            if items:
+                first = items[0]
+                location = ".".join(str(part) for part in first.get("loc", ()))
+                details["reason"] = f"{location}: {first.get('msg', 'неверное значение')}"
+                details["problems"] = [
+                    ".".join(str(part) for part in item.get("loc", ())) + f": {item.get('msg', '')}"
+                    for item in items[:10]
+                ]
+        if "reason" not in details:
+            details["reason"] = str(exc)[:300]
+        return cls(message, details=details)
+
+
 class NotFoundError(UPAError):
     code = "not_found"
     http_status = 404
