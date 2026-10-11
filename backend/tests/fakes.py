@@ -17,6 +17,35 @@ from app.crawler.dom import trim_html
 DATA_SOURCE_BODY = '{"items":[{"name":"Товар 1","price":1990},{"name":"Товар 2","price":2490}]}'
 
 
+def build_form_html(*, title: str = "Форма заявки") -> str:
+    """Страница с формой — для dry-run воркфлоу (Этап 7)."""
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>{title}</title>
+</head>
+<body>
+  <h1>{title}</h1>
+  <form id="order-form" action="/submit" method="post">
+    <label>Имя <input type="text" name="name" id="field-name" class="form-input" /></label>
+    <label>Email <input type="email" name="email" id="field-email" class="form-input" /></label>
+    <label>Город
+      <select name="city" id="field-city">
+        <option value="">—</option>
+        <option value="msk">Москва</option>
+        <option value="spb">Санкт-Петербург</option>
+      </select>
+    </label>
+    <label><input type="checkbox" name="agree" id="field-agree" /> Согласен</label>
+    <p class="form-hint">Заполните все поля</p>
+    <button type="submit" id="btn-submit" class="btn-submit">Отправить</button>
+  </form>
+  <div class="success-message" hidden>Заявка принята</div>
+</body>
+</html>"""
+
+
 def build_html(*, cards: int = 12, title: str = "Каталог товаров") -> str:
     """Синтетическая страница: скрипты, стили, cookie-баннер и список карточек."""
     cards_html = "".join(f"""
@@ -147,7 +176,9 @@ def patch_capture(monkeypatch: Any, settings: Settings, **kwargs: Any) -> dict[s
 
     async def _fake_capture(_settings: Settings, url: str) -> RawSnapshot:
         calls["count"] += 1
-        return build_snapshot(_settings, url=url, **kwargs)
+        options = dict(kwargs)
+        options.setdefault("url", url)
+        return build_snapshot(_settings, **options)
 
     monkeypatch.setattr(browser_module, "capture_page", _fake_capture)
     return calls

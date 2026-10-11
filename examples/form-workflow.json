@@ -1,0 +1,21 @@
+{
+  "url": "https://forms.example.com/order",
+  "title": "Форма заявки",
+  "description": "Пример воркфлоу ввода по строкам CSV",
+  "steps": [
+    { "type": "goto", "url": "https://forms.example.com/order" },
+    { "type": "fill", "selector": "#field-name", "value": "{{name}}" },
+    { "type": "fill", "selector": "#field-email", "value": "{{email}}" },
+    { "type": "select", "selector": "#field-city", "value": "{{city}}" },
+    { "type": "check", "selector": "#field-agree" },
+    {
+      "type": "click",
+      "selector": "#btn-submit",
+      "confirm_required": true,
+      "note": "отправка формы"
+    }
+  ],
+  "max_rows": 100,
+  "require_confirm_submit": true,
+  "skip_dangerous_in_dry_run": true
+}

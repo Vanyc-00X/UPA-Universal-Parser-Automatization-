@@ -1,7 +1,10 @@
-import { NavLink, Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet } from 'react-router-dom'
 
 import { api, queryKeys } from '../api/client'
+import { OnboardingWizard, isOnboardingDone } from './OnboardingWizard'
+import { applyTheme, getStoredTheme, toggleTheme, type ThemeMode } from '../utils/theme'
 
 interface NavItem {
   to: string
@@ -14,12 +17,23 @@ const NAV: NavItem[] = [
   { to: '/sites', label: 'Сайты', stage: '1' },
   { to: '/element-map', label: 'Карта элементов', stage: '2' },
   { to: '/scenarios', label: 'Сценарии', stage: '3' },
-  { to: '/runs', label: 'Запуски', stage: '5' },
+  { to: '/templates', label: 'Шаблоны', stage: '8' },
+  { to: '/workflow', label: 'Воркфлоу', stage: '7' },
+  { to: '/runs', label: 'Запуски', stage: '6' },
+  { to: '/monitor', label: 'Мониторинг' },
+  { to: '/help', label: 'Справка' },
   { to: '/roadmap', label: 'План работ' },
 ]
 
 /** Каркас интерфейса: боковое меню, шапка с индикатором состояния, контент. */
 export function Layout() {
+  const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme())
+  const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingDone())
+
+  useEffect(() => {
+    applyTheme(theme)
+  }, [theme])
+
   const health = useQuery({
     queryKey: queryKeys.health,
     queryFn: api.health,
@@ -49,6 +63,21 @@ export function Layout() {
           ))}
         </nav>
         <div className="sidebar__foot">
+          <button
+            className="btn btn--tiny"
+            type="button"
+            onClick={() => setTheme((current) => toggleTheme(current))}
+          >
+            Тема: {theme === 'dark' ? 'тёмная' : 'светлая'}
+          </button>
+          <button
+            className="btn btn--tiny"
+            type="button"
+            onClick={() => setShowOnboarding(true)}
+            style={{ marginTop: 8 }}
+          >
+            Онбординг
+          </button>
           <a href="/docs" target="_blank" rel="noreferrer">
             Документация API →
           </a>
@@ -58,7 +87,7 @@ export function Layout() {
       <div className="main">
         <header className="topbar">
           <div className="topbar__title">
-            Этап {health.data ? '— ' + (health.data.env ?? '') : ''}
+            {health.data ? `${health.data.app} · ${health.data.env}` : 'UPA'}
           </div>
           <div className={`badge badge--${status}`} title={health.error?.message ?? ''}>
             <span className="badge__dot" />
@@ -72,6 +101,8 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {showOnboarding ? <OnboardingWizard onClose={() => setShowOnboarding(false)} /> : null}
     </div>
   )
 }

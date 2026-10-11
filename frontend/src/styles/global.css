@@ -167,7 +167,8 @@ code {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+  /* visible: иначе native <select> на Windows иногда рисуется «полоской» */
+  overflow: visible;
 }
 
 .card__head {
@@ -300,6 +301,62 @@ code {
   font-family: inherit;
   font-size: 13px;
   min-width: 0;
+  min-height: 38px;
+  box-sizing: border-box;
+}
+
+select.input,
+.input--select {
+  display: block;
+  width: 100%;
+  appearance: auto;
+  -webkit-appearance: menulist;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.provider-chooser {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.provider-chooser__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  min-height: 58px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.provider-chooser__btn strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.provider-chooser__btn span {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.provider-chooser__btn:hover {
+  border-color: var(--accent);
+}
+
+.provider-chooser__btn--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .input:disabled {
@@ -340,6 +397,20 @@ code {
 
 .table tr:last-child td {
   border-bottom: none;
+}
+
+.table__row--active td {
+  background: var(--accent-soft);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .kv {
@@ -469,6 +540,17 @@ code {
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   margin-bottom: 12px;
+}
+
+.form-grid label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.form-grid__full {
+  grid-column: 1 / -1;
 }
 
 .field {
@@ -811,6 +893,90 @@ details summary {
   margin: 0;
   padding-left: 20px;
   color: var(--text);
+}
+
+/* ---------- Этап 8: светлая тема, онбординг, пустые состояния ---------- */
+
+html[data-theme='light'] {
+  --bg: #f4f6fa;
+  --bg-elevated: #ffffff;
+  --bg-input: #eef1f6;
+  --border: #d5dbe6;
+  --text: #1a2030;
+  --text-muted: #5c667a;
+  --accent: #2f6fed;
+  --accent-soft: rgba(47, 111, 237, 0.1);
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --error: #cf222e;
+}
+
+.empty-state {
+  padding: 28px 16px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.empty-state__title {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.empty-state__text {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+}
+
+.onboarding-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  padding: 16px;
+}
+
+.onboarding {
+  width: min(520px, 100%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+
+.onboarding__progress {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.onboarding__body {
+  margin-top: 8px;
+}
+
+.onboarding__list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+}
+
+.help-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.sidebar__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
 }
 
 @media (max-width: 900px) {

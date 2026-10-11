@@ -24,6 +24,7 @@ from app.analyzer.prompts import (
 )
 from app.analyzer.roles import Role
 from app.core.config import Settings
+from app.core.llm_runtime import PROVIDER_PRESETS, resolve_openai_target, with_llm_overrides
 from app.core.logging import get_logger
 
 log = get_logger(__name__)
@@ -171,8 +172,9 @@ def validate_response(
 class LLMGateway:
     """Единая точка общения с моделью."""
 
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
+    def __init__(self, settings: Settings, *, apply_overrides: bool = True) -> None:
+        # UI-переопределения (ключ API и провайдер) накладываются поверх .env.
+        self.settings = with_llm_overrides(settings) if apply_overrides else settings
         self._cache: dict[str, dict[str, Any]] = {}
         self._last_from_cache = False
 
@@ -180,55 +182,93 @@ class LLMGateway:
 
     async def status(self) -> LLMStatus:
         """Проверяет доступность провайдера, не поднимая исключений."""
-        if self.settings.llm_provider == "none":
+        provider = self.settings.llm_provider
+        if provider == "none":
             return LLMStatus(provider="none", available=False, detail="ИИ отключён в настройках")
+        if provider not in PROVIDER_PRESETS:
+            return LLMStatus(provider=provider, available=False, detail="неизвестный провайдер")
 
-        if self.settings.llm_provider == "ollama":
-            url = f"{self.settings.ollama_base_url.rstrip('/')}/api/tags"
-            try:
-                async with httpx.AsyncClient(timeout=4.0) as client:
-                    response = await client.get(url)
-                    response.raise_for_status()
-                    payload = response.json()
-            except Exception as exc:  # noqa: BLE001 — внешний сервис
-                return LLMStatus(
-                    provider="ollama",
-                    available=False,
-                    model=self.settings.ollama_model,
-                    detail=f"Ollama недоступна: {type(exc).__name__}",
-                )
-            models = [
-                item.get("name", "") for item in payload.get("models", []) if item.get("name")
-            ]
-            wanted = self.settings.ollama_model
-            available = bool(models)
-            detail = None
-            if models and wanted not in models:
-                detail = f"Модель {wanted} не найдена локально"
+        if provider == "ollama":
+            return await self._status_ollama()
+
+        target = resolve_openai_target(self.settings)
+        if not target["base_url"]:
+            return LLMStatus(
+                provider=provider,
+                available=False,
+                detail="Не задан base URL провайдера",
+            )
+        if target["needs_key"] and not target["api_key"]:
+            return LLMStatus(
+                provider=provider,
+                available=False,
+                model=target["model"] or None,
+                detail="Не задан API-ключ",
+            )
+
+        models = await self._list_openai_models(target)
+        detail = None
+        available = True
+        if models is None:
+            # /models может быть закрыт — ключ+URL всё равно считаем настроенными.
+            models = []
+            detail = "эндпоинт /models недоступен, но ключ/URL заданы"
+        elif target["model"] and models and target["model"] not in models:
+            detail = f"модель {target['model']} не найдена в /models"
+        return LLMStatus(
+            provider=provider,
+            available=available,
+            model=target["model"] or None,
+            detail=detail,
+            models=sorted(models),
+        )
+
+    async def _status_ollama(self) -> LLMStatus:
+        url = f"{self.settings.ollama_base_url.rstrip('/')}/api/tags"
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                payload = response.json()
+        except Exception as exc:  # noqa: BLE001 — внешний сервис
             return LLMStatus(
                 provider="ollama",
-                available=available,
-                model=wanted,
-                detail=detail,
-                models=sorted(models),
+                available=False,
+                model=self.settings.ollama_model,
+                detail=f"Ollama недоступна: {type(exc).__name__}",
             )
-
-        if self.settings.llm_provider == "openai_compatible":
-            if not self.settings.llm_cloud_base_url or not self.settings.llm_cloud_api_key:
-                return LLMStatus(
-                    provider="openai_compatible",
-                    available=False,
-                    detail="Не заданы адрес и ключ облачного провайдера",
-                )
-            return LLMStatus(
-                provider="openai_compatible",
-                available=True,
-                model=self.settings.llm_cloud_model or None,
-            )
-
+        models = [item.get("name", "") for item in payload.get("models", []) if item.get("name")]
+        wanted = self.settings.ollama_model
+        detail = None
+        if models and wanted not in models:
+            detail = f"Модель {wanted} не найдена локально"
         return LLMStatus(
-            provider=self.settings.llm_provider, available=False, detail="неизвестный провайдер"
+            provider="ollama",
+            available=bool(models),
+            model=wanted,
+            detail=detail,
+            models=sorted(models),
         )
+
+    async def _list_openai_models(self, target: dict[str, Any]) -> list[str] | None:
+        url = f"{target['base_url']}/models"
+        headers = {"Authorization": f"Bearer {target['api_key']}"}
+        headers.update(target.get("headers") or {})
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                payload = response.json()
+        except Exception:  # noqa: BLE001
+            return None
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, list):
+            return []
+        names: list[str] = []
+        for item in data:
+            if isinstance(item, dict) and item.get("id"):
+                names.append(str(item["id"]))
+        return names
 
     # --- Работа с моделью ---------------------------------------------------
 
@@ -251,10 +291,38 @@ class LLMGateway:
             self._last_from_cache = True
             return cached.get("text"), None
 
+        text, error = await self._complete_provider(provider, system, user, json_mode=json_mode)
+
+        # Локальный сбой → облачный фолбэк, если пользователь явно включил.
+        if error and self.settings.llm_cloud_fallback and provider in {"ollama", "llamacpp"}:
+            if self.settings.llm_cloud_api_key and (
+                self.settings.llm_cloud_base_url or self.settings.llm_cloud_model
+            ):
+                log.info("llm.cloud_fallback", from_provider=provider)
+                updates: dict[str, Any] = {"llm_provider": "openai_compatible"}
+                if not self.settings.llm_cloud_base_url:
+                    updates["llm_cloud_base_url"] = "https://openrouter.ai/api/v1"
+                fallback = LLMGateway(
+                    self.settings.model_copy(update=updates), apply_overrides=False
+                )
+                text, error = await fallback._complete_provider(
+                    "openai_compatible", system, user, json_mode=json_mode
+                )
+
+        if error:
+            return None, error
+
+        self._cache[prompt_hash] = {"text": text}
+        self._last_from_cache = False
+        return text, None
+
+    async def _complete_provider(
+        self, provider: str, system: str, user: str, *, json_mode: bool
+    ) -> tuple[str | None, str | None]:
         try:
             if provider == "ollama":
                 text = await self._complete_ollama(system, user, json_mode=json_mode)
-            elif provider == "openai_compatible":
+            elif provider in PROVIDER_PRESETS and PROVIDER_PRESETS[provider]["transport"] == "openai":
                 text = await self._complete_openai(system, user, json_mode=json_mode)
             else:
                 return None, f"провайдер {provider} не поддержан"
@@ -265,15 +333,13 @@ class LLMGateway:
                 "llm.request_failed", provider=provider, error=f"{type(exc).__name__}: {exc}"
             )
             return None, f"{type(exc).__name__}: {exc}"
-
-        self._cache[prompt_hash] = {"text": text}
-        self._last_from_cache = False
         return text, None
 
     def _model_name(self) -> str:
         if self.settings.llm_provider == "ollama":
             return self.settings.ollama_model
-        return self.settings.llm_cloud_model or "unknown"
+        target = resolve_openai_target(self.settings)
+        return target["model"] or "unknown"
 
     async def _complete_ollama(self, system: str, user: str, *, json_mode: bool) -> str | None:
         url = f"{self.settings.ollama_base_url.rstrip('/')}/api/chat"
@@ -299,9 +365,15 @@ class LLMGateway:
         return content if isinstance(content, str) else None
 
     async def _complete_openai(self, system: str, user: str, *, json_mode: bool) -> str | None:
-        url = f"{self.settings.llm_cloud_base_url.rstrip('/')}/chat/completions"
+        target = resolve_openai_target(self.settings)
+        if not target["base_url"]:
+            raise RuntimeError("не задан base URL для OpenAI-совместимого провайдера")
+        if target["needs_key"] and not target["api_key"]:
+            raise RuntimeError("не задан API-ключ")
+
+        url = f"{target['base_url']}/chat/completions"
         payload: dict[str, Any] = {
-            "model": self.settings.llm_cloud_model,
+            "model": target["model"],
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -310,11 +382,16 @@ class LLMGateway:
             "max_tokens": MAX_RESPONSE_TOKENS,
         }
         if json_mode:
+            # Некоторые локальные серверы не любят response_format — при 400 повторим без него.
             payload["response_format"] = {"type": "json_object"}
 
-        headers = {"Authorization": f"Bearer {self.settings.llm_cloud_api_key}"}
+        headers = {"Authorization": f"Bearer {target['api_key']}"}
+        headers.update(target.get("headers") or {})
         async with httpx.AsyncClient(timeout=self.settings.llm_timeout_s) as client:
             response = await client.post(url, json=payload, headers=headers)
+            if response.status_code == 400 and "response_format" in payload:
+                payload.pop("response_format", None)
+                response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
         choices = data.get("choices") or []

@@ -7,10 +7,13 @@ from fastapi import APIRouter, Request
 from app import __version__
 from app.api import deps
 from app.api.schemas import (
+    BrowserStatusResponse,
     ComponentHealth,
     FeaturesResponse,
     FeatureStatus,
     HealthResponse,
+    LLMConfigResponse,
+    LLMConfigUpdateRequest,
     LLMStatusResponse,
     RoadmapResponse,
     StageInfo,
@@ -54,36 +57,36 @@ FEATURES: list[FeatureStatus] = [
         key="extraction",
         title="Движок извлечения",
         stage="4",
-        status="planned",
-        description="JSON-API/DOM-стратегии, пагинация, нормализация, валидация",
+        status="done",
+        description="DOM list/single, нормализация, пагинация, отчёт о полноте, API запусков",
     ),
     FeatureStatus(
         key="storage_export",
         title="Хранение и экспорт",
         stage="5",
-        status="planned",
-        description="История запусков, CSV/XLSX/JSON, генератор ТЗ в Markdown",
+        status="done",
+        description="Экспорт CSV/XLSX/JSON, Markdown-ТЗ, diff запусков, артефакты",
     ),
     FeatureStatus(
         key="self_healing",
         title="Надёжность и self-healing",
         stage="6",
-        status="planned",
-        description="Автопочинка селекторов, ретраи, наблюдаемость",
+        status="done",
+        description="Диагностика селекторов, предложение патча, журнал, ретраи, robots.txt",
     ),
     FeatureStatus(
         key="form_fill",
         title="Автоматизация ввода",
         stage="7",
-        status="planned",
-        description="Действия, параметризация, генерация Python-скрипта",
+        status="done",
+        description="Действия, запись, dry-run, CSV/XLSX, экспорт Playwright-скрипта",
     ),
     FeatureStatus(
         key="packaging",
         title="Упаковка и документация",
         stage="8",
-        status="planned",
-        description="Лаунчер, онбординг, документация",
+        status="done",
+        description="Онбординг, шаблоны, ensure Ollama, лаунчер Windows, документация",
     ),
 ]
 
@@ -128,7 +131,7 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="3",
         title="Визуальный редактор элементов",
-        status="in_progress",
+        status="done",
         items=[
             "инспектор страницы с рамками",
             "проверка селекторов на живом DOM",
@@ -139,36 +142,63 @@ STAGES: list[StageInfo] = [
     StageInfo(
         key="4",
         title="Движок извлечения",
-        status="planned",
-        items=["резолвер селекторов", "стратегии json_api/dom_list/llm", "пагинация", "валидация"],
+        status="done",
+        items=[
+            "извлечение list/single из DOM",
+            "нормализация цен, ссылок и дат",
+            "пагинация next_link и url_template",
+            "запуски, записи и отчёт о полноте",
+        ],
     ),
     StageInfo(
         key="5",
         title="Хранение и экспорт",
-        status="planned",
-        items=["таблица результатов", "CSV/XLSX/JSON", "генератор ТЗ в Markdown"],
+        status="done",
+        items=[
+            "экспорт CSV/XLSX/JSON/JSONL/Markdown",
+            "генератор ТЗ в Markdown",
+            "diff запусков",
+            "артефакты экспорта на диске",
+        ],
     ),
     StageInfo(
         key="6",
         title="Надёжность и self-healing",
-        status="planned",
-        items=["автопочинка селекторов", "ретраи", "наблюдаемость"],
+        status="done",
+        items=[
+            "диагностика сломанных селекторов",
+            "предложение патча без автоприменения",
+            "журнал шагов запуска",
+            "ретраи сети и проверка robots.txt",
+        ],
     ),
     StageInfo(
         key="7",
         title="Автоматизация ввода",
-        status="planned",
-        items=["действия", "параметризация из файла", "экспорт в Python-скрипт"],
+        status="done",
+        items=[
+            "действия включая upload/loop/if",
+            "запись событий и очеловечивание шагов",
+            "параметризация CSV/XLSX и dry-run",
+            "экспорт в Python-скрипт Playwright",
+            "подтверждение опасных отправок",
+        ],
     ),
     StageInfo(
         key="8",
         title="Упаковка и документация",
-        status="planned",
-        items=["лаунчер", "онбординг", "документация"],
+        status="done",
+        items=[
+            "онбординг-визард и пустые состояния",
+            "шаблоны сценариев и примеры CSV",
+            "проверка/загрузка модели Ollama",
+            "лаунчер Windows и Docker Compose",
+            "документация: быстрый старт, FAQ, дисклеймер",
+        ],
     ),
 ]
 
-CURRENT_STAGE = "4"
+CURRENT_STAGE = "8"
 
 
 def _settings(request: Request) -> Settings:
@@ -240,6 +270,8 @@ async def system_info(request: Request) -> SystemInfoResponse:
             "provider": settings.llm_provider,
             "ollama_base_url": settings.ollama_base_url,
             "ollama_model": settings.ollama_model,
+            "llamacpp_base_url": settings.llamacpp_base_url,
+            "llamacpp_model": settings.llamacpp_model,
             "cloud_fallback": settings.llm_cloud_fallback,
         },
     )
@@ -268,9 +300,51 @@ async def roadmap() -> RoadmapResponse:
 @router.get(
     "/system/llm",
     response_model=LLMStatusResponse,
-    summary="Состояние локальной ИИ-модели",
+    summary="Состояние настроенного ИИ-провайдера",
 )
 async def llm_status(request: Request) -> LLMStatusResponse:
     settings = _settings(request)
     data = await deps.check_llm(settings)
     return LLMStatusResponse(**data)
+
+
+@router.get(
+    "/system/llm/config",
+    response_model=LLMConfigResponse,
+    summary="Конфигурация ИИ (Ollama / llama.cpp / OpenRouter / OpenAI / Grok)",
+)
+async def llm_config(request: Request) -> LLMConfigResponse:
+    from app.core.llm_runtime import public_config
+
+    return LLMConfigResponse(**public_config(_settings(request)))
+
+
+@router.put(
+    "/system/llm/config",
+    response_model=LLMConfigResponse,
+    summary="Сохранить провайдера и API-ключ",
+)
+async def update_llm_config(
+    payload: LLMConfigUpdateRequest,
+    request: Request,
+) -> LLMConfigResponse:
+    from app.core.llm_runtime import public_config, save_overrides
+
+    settings = _settings(request)
+    updates = payload.model_dump(exclude_unset=True)
+    if "provider" in updates:
+        updates["llm_provider"] = updates.pop("provider")
+    save_overrides(settings, updates)
+    return LLMConfigResponse(**public_config(settings))
+
+
+@router.get(
+    "/system/browser",
+    response_model=BrowserStatusResponse,
+    summary="Готовность Chromium / Chrome / Edge",
+)
+async def browser_status(request: Request) -> BrowserStatusResponse:
+    from app.crawler.browser_ready import browser_status as probe
+
+    settings = _settings(request)
+    return BrowserStatusResponse(**probe(settings))

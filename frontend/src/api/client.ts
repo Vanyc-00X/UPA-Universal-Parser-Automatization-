@@ -9,6 +9,8 @@ import type {
   ApiErrorBody,
   FeaturesResponse,
   HealthResponse,
+  LLMConfigResponse,
+  LLMConfigUpdateRequest,
   LLMStatusResponse,
   RoadmapResponse,
   SystemInfoResponse,
@@ -48,6 +50,31 @@ import type {
   ScenarioListResponse,
   ScenarioVersionOut,
 } from './scenarioTypes'
+import type {
+  RunItemsResponse,
+  RunListResponse,
+  RunOut,
+  RunPreviewResponse,
+  RunRequest,
+} from './runTypes'
+import type {
+  HumanizeResponse,
+  ParseCsvResponse,
+  RecordedEvent,
+  RecordingResponse,
+  WorkflowDefinition,
+  WorkflowExportResponse,
+  WorkflowOut,
+  WorkflowRunResponse,
+  WorkflowSaveRequest,
+  WorkflowSaveResponse,
+} from './workflowTypes'
+import type {
+  EnsureLlmResponse,
+  TemplateDetail,
+  TemplateKind,
+  TemplateListResponse,
+} from './packagingTypes'
 
 const API_PREFIX = '/api/v1'
 
@@ -134,6 +161,13 @@ export const api = {
   features: () => request<FeaturesResponse>(`${API_PREFIX}/system/features`),
   roadmap: () => request<RoadmapResponse>(`${API_PREFIX}/system/roadmap`),
   llmStatus: () => request<LLMStatusResponse>(`${API_PREFIX}/system/llm`),
+  llmConfig: () => request<LLMConfigResponse>(`${API_PREFIX}/system/llm/config`),
+  updateLlmConfig: (payload: LLMConfigUpdateRequest) =>
+    request<LLMConfigResponse>(`${API_PREFIX}/system/llm/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
 
   // --- Этап 1: сайты и снапшоты ------------------------------------------
   captureSnapshot: (payload: SnapshotCaptureRequest) =>
@@ -227,6 +261,274 @@ export const api = {
     request<ScenarioListResponse>(`${API_PREFIX}/scenarios${query(params)}`),
   scenarioVersions: (scenarioId: string) =>
     request<ScenarioVersionOut[]>(`${API_PREFIX}/scenarios/${scenarioId}/versions`),
+  deleteScenario: (scenarioId: string) =>
+    del<{ scenario_id: string; deleted: boolean }>(`${API_PREFIX}/scenarios/${scenarioId}`),
+
+  // --- Этап 4: запуски ----------------------------------------------------
+  createRun: (payload: RunRequest) => post<RunOut>(`${API_PREFIX}/runs`, payload),
+  runs: (params: { scenario_id?: string; limit?: number; offset?: number } = {}) =>
+    request<RunListResponse>(`${API_PREFIX}/runs${query(params)}`),
+  run: (runId: string) => request<RunOut>(`${API_PREFIX}/runs/${runId}`),
+  runItems: (
+    runId: string,
+    params: { limit?: number; offset?: number; only_invalid?: boolean } = {},
+  ) => request<RunItemsResponse>(`${API_PREFIX}/runs/${runId}/items${query(params)}`),
+  deleteRun: (runId: string) =>
+    del<{ run_id: string; deleted: boolean }>(`${API_PREFIX}/runs/${runId}`),
+  previewScenario: (payload: RunRequest) =>
+    post<RunPreviewResponse>(`${API_PREFIX}/runs/preview-scenario`, payload),
+
+  // --- Этап 5: экспорт ----------------------------------------------------
+  exportRunUrl: (
+    runId: string,
+    params: {
+      format?: 'csv' | 'xlsx' | 'json' | 'jsonl' | 'md'
+      delimiter?: ',' | ';' | 'tab'
+      q?: string
+      only_invalid?: boolean
+    } = {},
+  ) => `${API_PREFIX}/runs/${runId}/export${query(params)}`,
+  runSpec: (runId: string) =>
+    request<{ filename: string; markdown: string; run_id: string }>(
+      `${API_PREFIX}/runs/${runId}/spec`,
+    ),
+  scenarioSpec: (scenarioId: string) =>
+    request<{ filename: string; markdown: string; scenario_id: string }>(
+      `${API_PREFIX}/scenarios/${scenarioId}/spec`,
+    ),
+  runDiff: (runId: string, against?: string) =>
+    request<{
+      current_run_id: string
+      previous_run_id: string
+      added: number
+      removed: number
+      changed: number
+      unchanged: number
+      added_items: Array<Record<string, unknown>>
+      removed_items: Array<Record<string, unknown>>
+      changed_items: Array<Record<string, unknown>>
+    }>(`${API_PREFIX}/runs/${runId}/diff${query({ against })}`),
+  deliverRun: (
+    runId: string,
+    payload: {
+      kind: 'webhook' | 'sheets' | 'postgres'
+      target: string
+      options?: Record<string, unknown>
+      q?: string
+      only_invalid?: boolean
+    },
+  ) =>
+    post<{
+      kind: string
+      ok: boolean
+      records: number
+      detail: string
+      response: Record<string, unknown> | null
+    }>(`${API_PREFIX}/runs/${runId}/deliver`, payload),
+  runArtifacts: (runId: string) =>
+    request<
+      Array<{
+        id: string
+        kind: string
+        filename: string
+        size_bytes: number | null
+        download_url: string
+      }>
+    >(`${API_PREFIX}/runs/${runId}/artifacts`),
+
+  // --- Этап 6: self-healing ----------------------------------------------
+  runHeal: (runId: string, refresh = false) =>
+    request<{
+      run_id: string
+      scenario_id: string
+      needed: boolean
+      coverage: number
+      min_coverage: number
+      broken_fields: string[]
+      patches: Array<{
+        key: string
+        title: string
+        old_selector: string
+        new_selector: string
+        reason: string
+        matches: number
+        source: string
+        required: boolean
+      }>
+      notes: string[]
+      apply_hint: string
+    }>(`${API_PREFIX}/runs/${runId}/heal${query({ refresh })}`),
+  applyHeal: (runId: string, payload: { keys?: string[]; change_note?: string } = {}) =>
+    post<{
+      scenario_id: string
+      version: number
+      applied: Array<{ key: string; new_selector: string }>
+    }>(`${API_PREFIX}/runs/${runId}/heal/apply`, payload),
+  runJournal: (runId: string) =>
+    request<
+      Array<{
+        name: string
+        message: string
+        level: string
+        duration_ms: number
+        details: Record<string, unknown>
+      }>
+    >(`${API_PREFIX}/runs/${runId}/journal`),
+
+  // --- Этап 7: воркфлоу ввода --------------------------------------------
+  saveWorkflow: (payload: WorkflowSaveRequest) =>
+    post<WorkflowSaveResponse>(`${API_PREFIX}/workflows`, payload),
+  workflow: (scenarioId: string) =>
+    request<WorkflowOut>(`${API_PREFIX}/workflows/${scenarioId}`),
+  workflowDryRun: (
+    scenarioId: string,
+    payload: {
+      snapshot_id: string
+      rows?: Record<string, unknown>[]
+      csv_text?: string
+      persist?: boolean
+    },
+  ) => post<WorkflowRunResponse>(`${API_PREFIX}/workflows/${scenarioId}/dry-run`, payload),
+  workflowLiveRun: (
+    scenarioId: string,
+    payload: {
+      rows?: Record<string, unknown>[]
+      csv_text?: string
+      confirm_dangerous?: boolean
+      persist?: boolean
+    },
+  ) => post<WorkflowRunResponse>(`${API_PREFIX}/workflows/${scenarioId}/run`, payload),
+  workflowPreviewDryRun: (payload: {
+    snapshot_id: string
+    workflow: WorkflowDefinition
+    rows?: Record<string, unknown>[]
+    csv_text?: string
+  }) => post<WorkflowRunResponse>(`${API_PREFIX}/workflows/preview-dry-run`, payload),
+  workflowExportScript: (
+    scenarioId: string,
+    payload: { rows?: Record<string, unknown>[]; csv_text?: string } = {},
+  ) => post<WorkflowExportResponse>(`${API_PREFIX}/workflows/${scenarioId}/export-script`, payload),
+  workflowExportDraft: (payload: {
+    workflow: WorkflowDefinition
+    rows?: Record<string, unknown>[]
+    csv_text?: string
+  }) => post<WorkflowExportResponse>(`${API_PREFIX}/workflows/export-script`, payload),
+  parseWorkflowCsv: (csv_text: string, delimiter = ',') =>
+    post<ParseCsvResponse>(`${API_PREFIX}/workflows/parse-csv`, { csv_text, delimiter }),
+  parseWorkflowXlsx: async (file: File) => {
+    const body = new FormData()
+    body.append('file', file)
+    const response = await fetch(`${API_PREFIX}/workflows/parse-xlsx`, {
+      method: 'POST',
+      body,
+    })
+    if (!response.ok) {
+      let payload: ApiErrorBody = {
+        code: 'http_error',
+        message: response.statusText,
+        details: {},
+      }
+      try {
+        const json = (await response.json()) as { error?: ApiErrorBody }
+        if (json.error) payload = json.error
+      } catch {
+        /* keep fallback */
+      }
+      throw new ApiError(response.status, payload)
+    }
+    return (await response.json()) as ParseCsvResponse
+  },
+  workflowFromRecording: (payload: {
+    url: string
+    title?: string
+    events: RecordedEvent[]
+    humanize?: boolean
+  }) => post<RecordingResponse>(`${API_PREFIX}/workflows/from-recording`, payload),
+  startLiveRecording: (payload: { url: string; headed?: boolean; dry?: boolean }) =>
+    post<{
+      session_id: string
+      url: string
+      status: string
+      error: string | null
+      events: RecordedEvent[]
+      events_count: number
+    }>(`${API_PREFIX}/workflows/recording/start`, payload),
+  getLiveRecording: (sessionId: string) =>
+    request<{
+      session_id: string
+      url: string
+      status: string
+      error: string | null
+      events: RecordedEvent[]
+      events_count: number
+    }>(`${API_PREFIX}/workflows/recording/${sessionId}`),
+  stopLiveRecording: (sessionId: string, title?: string) =>
+    post<{
+      session: {
+        session_id: string
+        url: string
+        status: string
+        error: string | null
+        events: RecordedEvent[]
+        events_count: number
+      }
+      workflow: WorkflowDefinition | null
+      summary: Record<string, unknown>
+      notes: string[]
+    }>(
+      `${API_PREFIX}/workflows/recording/${sessionId}/stop${query({ title: title || 'Записанный сценарий', humanize: true })}`,
+      {},
+    ),
+  humanizeWorkflow: (workflow: WorkflowDefinition) =>
+    post<HumanizeResponse>(`${API_PREFIX}/workflows/humanize`, { workflow }),
+
+  // --- Этап 8: шаблоны и ensure LLM --------------------------------------
+  templates: (kind?: TemplateKind) =>
+    request<TemplateListResponse>(
+      `${API_PREFIX}/templates${kind ? query({ kind }) : ''}`,
+    ),
+  template: (templateId: string) =>
+    request<TemplateDetail>(`${API_PREFIX}/templates/${templateId}`),
+  ensureLlm: (pull = false) =>
+    post<EnsureLlmResponse>(`${API_PREFIX}/system/llm/ensure`, { pull }),
+
+  // --- Мониторинг изменений ----------------------------------------------
+  monitorList: () =>
+    request<{
+      items: Array<{
+        scenario_id: string
+        name: string
+        interval: string | null
+        interval_seconds: number | null
+        last_run_at: string | null
+        is_due: boolean
+        is_active: boolean
+      }>
+      intervals: Record<string, number>
+    }>(`${API_PREFIX}/monitor`),
+  monitorSchedule: (scenarioId: string, interval: string | null) =>
+    request<{
+      scenario_id: string
+      name: string
+      interval: string | null
+      interval_seconds: number | null
+      last_run_at: string | null
+      is_due: boolean
+      is_active: boolean
+    }>(`${API_PREFIX}/monitor/scenarios/${scenarioId}/schedule`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval }),
+    }),
+  monitorCheck: (scenarioId: string, live = false) =>
+    post<{ event: Record<string, unknown> }>(
+      `${API_PREFIX}/monitor/scenarios/${scenarioId}/check`,
+      { live },
+    ),
+  monitorEvents: (limit = 50) =>
+    request<{ items: Array<Record<string, unknown>>; total: number }>(
+      `${API_PREFIX}/monitor/events${query({ limit })}`,
+    ),
 }
 
 /** Ключи запросов TanStack Query в одном месте — так их не разъедутся инвалидации. */
@@ -236,6 +538,7 @@ export const queryKeys = {
   features: ['system', 'features'] as const,
   roadmap: ['system', 'roadmap'] as const,
   llm: ['system', 'llm'] as const,
+  llmConfig: ['system', 'llm', 'config'] as const,
   sites: ['sites'] as const,
   snapshots: (siteId?: string) => ['snapshots', siteId ?? 'all'] as const,
   snapshot: (id: string) => ['snapshot', id] as const,
@@ -250,4 +553,10 @@ export const queryKeys = {
   preview: (snapshotId: string) => ['preview', snapshotId] as const,
   scenarios: (siteId?: string) => ['scenarios', siteId ?? 'all'] as const,
   scenarioVersions: (scenarioId: string) => ['scenario-versions', scenarioId] as const,
+  runs: (scenarioId?: string) => ['runs', scenarioId ?? 'all'] as const,
+  run: (runId: string) => ['run', runId] as const,
+  runItems: (runId: string) => ['run-items', runId] as const,
+  templates: (kind?: string) => ['templates', kind ?? 'all'] as const,
+  monitor: ['monitor'] as const,
+  monitorEvents: ['monitor', 'events'] as const,
 }

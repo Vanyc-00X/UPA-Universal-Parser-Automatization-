@@ -108,14 +108,34 @@ class Settings(BaseSettings):
     browser_dismiss_cookie_banners: bool = True
 
     # --- LLM ----------------------------------------------------------------
-    llm_provider: Literal["ollama", "openai_compatible", "none"] = "ollama"
+    # ollama | llamacpp | openai | openrouter | grok | openai_compatible | none
+    llm_provider: Literal[
+        "ollama",
+        "llamacpp",
+        "openai",
+        "openrouter",
+        "grok",
+        "openai_compatible",
+        "none",
+    ] = "ollama"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5:7b"
+    # llama.cpp server (OpenAI-compatible /v1)
+    llamacpp_base_url: str = "http://127.0.0.1:8080/v1"
+    llamacpp_model: str = "local"
+    # Облачный / OpenAI-совместимый ключ (OpenAI, OpenRouter, Grok, custom).
     llm_cloud_fallback: bool = False
     llm_cloud_base_url: str = ""
     llm_cloud_api_key: str = ""
     llm_cloud_model: str = ""
     llm_timeout_s: int = 180
+
+    # --- Надёжность / self-healing (Этап 6) ---------------------------------
+    respect_robots_txt: bool = True
+    fetch_max_retries: int = 3
+    fetch_retry_backoff_ms: int = 500
+    heal_min_coverage: float = 0.95
+    heal_auto_propose: bool = True
 
     # --- Артефакты ----------------------------------------------------------
     artifacts_retention_days: int = 30

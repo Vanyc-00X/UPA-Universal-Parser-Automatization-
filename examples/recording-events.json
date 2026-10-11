@@ -1,0 +1,23 @@
+[
+  {
+    "type": "goto",
+    "url": "https://forms.example.com/order"
+  },
+  {
+    "type": "fill",
+    "selector": "#field-name",
+    "value": "Иван",
+    "name": "name"
+  },
+  {
+    "type": "fill",
+    "selector": "#field-email",
+    "value": "ivan@example.com"
+  },
+  {
+    "type": "click",
+    "selector": "#btn-submit",
+    "text": "Отправить",
+    "input_type": "submit"
+  }
+]

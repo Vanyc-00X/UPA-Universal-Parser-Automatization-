@@ -401,6 +401,56 @@ async def save_draft(
     return await get_state(session, settings, snapshot_id)
 
 
+@dataclass
+class SavedScenario:
+    """Результат сохранения черновика как сценария."""
+
+    scenario: Any
+    version: Any
+    definition: ScenarioDefinition
+
+
+async def build_scenario(
+    session: AsyncSession,
+    settings: Settings,
+    snapshot_id: str,
+    *,
+    name: str,
+    description: str | None = None,
+    change_note: str | None = None,
+    scenario_id: str | None = None,
+) -> SavedScenario:
+    """Сохраняет текущий черновик как сценарий и его версию.
+
+    Проверка селекторов уже выполнена при чтении состояния, поэтому здесь
+    остаётся только запись. Название и описание подставляются в определение:
+    сценарий должен быть самодостаточным документом.
+    """
+    from app.editor import scenario as scenario_service
+
+    state = await get_state(session, settings, snapshot_id)
+    snapshot = await session.get(Snapshot, snapshot_id)
+    if snapshot is None:
+        raise NotFoundError("Снапшот не найден", details={"snapshot_id": snapshot_id})
+
+    definition = state.draft.model_copy(
+        update={
+            "title": name,
+            "description": description or state.draft.description,
+        }
+    )
+    scenario, version = await scenario_service.save_scenario(
+        session,
+        definition,
+        name=name,
+        site_id=snapshot.site_id,
+        description=description,
+        change_note=change_note,
+        scenario_id=scenario_id,
+    )
+    return SavedScenario(scenario=scenario, version=version, definition=definition)
+
+
 async def reset_draft(session: AsyncSession, settings: Settings, snapshot_id: str) -> EditorState:
     """Откатывает черновик к базовому сценарию."""
     record = await analyze_service.require_element_map(session, snapshot_id)
@@ -547,8 +597,29 @@ def validate_definition(
             elif container.count == 0:
                 problems.append("Контейнер списка не найден на странице")
 
-    if definition.plan.mode == "api" and not definition.plan.api_url:
-        problems.append("Режим api выбран, но адрес запроса не указан")
+    if definition.plan.mode == "api":
+        if not definition.plan.records_path:
+            problems.append(
+                "Режим XHR/JSON: укажите путь к списку записей (records_path), например data.items"
+            )
+        # api_url необязателен: UPA сама выберет самый богатый JSON из network.
+
+    if definition.detail.enabled:
+        if not definition.detail.fields:
+            problems.append(
+                "Список → карточка включён, но поля карточки не заданы"
+            )
+        link_keys = {field.key for field in definition.fields}
+        if definition.detail.link_field not in link_keys:
+            problems.append(
+                f"Поле ссылки на карточку «{definition.detail.link_field}» "
+                "должно быть среди полей списка (обычно url)"
+            )
+        overlap = link_keys & {field.key for field in definition.detail.fields}
+        if overlap:
+            problems.append(
+                f"Имена полей списка и карточки пересекаются: {sorted(overlap)}"
+            )
 
     if definition.pagination.kind is not PaginationKind.NONE:
         pagination = definition.pagination

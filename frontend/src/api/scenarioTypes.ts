@@ -24,6 +24,7 @@ export interface ExtractionPlan {
   item_selector: string | null
   api_url: string | null
   api_method: string
+  records_path: string | null
 }
 
 export interface PaginationSpec {
@@ -35,6 +36,15 @@ export interface PaginationSpec {
   delay_ms: number
 }
 
+export interface DetailSpec {
+  enabled: boolean
+  link_field: string
+  snapshot_id: string | null
+  fields: FieldSpec[]
+  max_follows: number
+  delay_ms: number
+}
+
 export interface ScenarioDefinition {
   url: string
   snapshot_id: string | null
@@ -42,6 +52,7 @@ export interface ScenarioDefinition {
   description: string | null
   plan: ExtractionPlan
   pagination: PaginationSpec
+  detail: DetailSpec
   fields: FieldSpec[]
   limits: Record<string, unknown>
   created_from: string
@@ -100,8 +111,8 @@ export const PAGINATION_LABELS: Record<PaginationKind, string> = {
 }
 
 export const PLAN_LABELS: Record<PlanMode, string> = {
-  list: 'список записей',
-  single: 'одна запись',
-  api: 'JSON-запрос',
+  list: 'HTML: список записей',
+  single: 'HTML: одна запись',
+  api: 'XHR/JSON из сети',
   llm: 'разбор моделью',
 }
