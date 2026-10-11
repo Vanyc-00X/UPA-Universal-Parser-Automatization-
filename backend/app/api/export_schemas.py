@@ -57,3 +57,24 @@ class ArtifactOut(BaseModel):
     mime: str | None
     download_url: str
     created_at: str
+
+
+class DeliverRequest(BaseModel):
+    """Доставка результатов во внешний приёмник."""
+
+    kind: Literal["webhook", "sheets", "postgres"]
+    target: str = Field(
+        ...,
+        description="URL webhook / spreadsheet_id / DSN postgresql://…",
+    )
+    options: dict[str, Any] = Field(default_factory=dict)
+    q: str | None = None
+    only_invalid: bool = False
+
+
+class DeliverResponse(BaseModel):
+    kind: str
+    ok: bool
+    records: int
+    detail: str
+    response: dict[str, Any] | None = None

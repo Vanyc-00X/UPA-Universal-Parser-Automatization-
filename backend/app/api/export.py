@@ -10,7 +10,14 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.export_schemas import ArtifactOut, ExportMetaOut, RunDiffOut, SpecOut
+from app.api.export_schemas import (
+    ArtifactOut,
+    DeliverRequest,
+    DeliverResponse,
+    ExportMetaOut,
+    RunDiffOut,
+    SpecOut,
+)
 from app.core.config import Settings
 from app.core.db import get_db
 from app.core.errors import NotFoundError, ValidationError
@@ -113,6 +120,28 @@ async def export_run_meta(
         artifact_id=result.artifact_id,
         download_url=f"/api/v1/runs/{run_id}/artifacts/{result.artifact_id}",
     )
+
+
+@router.post(
+    "/runs/{run_id}/deliver",
+    response_model=DeliverResponse,
+    summary="Отправить результаты в Sheets / webhook / PostgreSQL",
+)
+async def deliver_run(
+    run_id: str,
+    payload: DeliverRequest,
+    db: AsyncSession = Depends(get_db),
+) -> DeliverResponse:
+    result = await export_service.deliver_run(
+        db,
+        run_id,
+        kind=payload.kind,
+        target=payload.target,
+        options=payload.options,
+        query=payload.q,
+        only_invalid=payload.only_invalid,
+    )
+    return DeliverResponse(**result.as_dict())
 
 
 @router.get(

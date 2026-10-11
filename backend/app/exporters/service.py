@@ -16,6 +16,7 @@ from app.editor import scenario as scenario_service
 from app.editor.schema import ScenarioDefinition
 from app.engine import service as engine
 from app.exporters import csv_export, json_export, markdown, xlsx_export
+from app.exporters.destinations import DeliveryResult, DestinationKind, deliver
 from app.exporters.diff import RunDiff, compare_runs
 from app.exporters.table import ExportTable, table_from_items
 from app.storage.models import Artifact, Run, Scenario, ScenarioVersion
@@ -150,6 +151,34 @@ async def export_run(
         artifact_id=artifact_id,
         rel_path=rel_path,
     )
+
+
+async def deliver_run(
+    session: AsyncSession,
+    run_id: str,
+    *,
+    kind: DestinationKind | str,
+    target: str,
+    options: dict | None = None,
+    query: str | None = None,
+    only_invalid: bool = False,
+) -> DeliveryResult:
+    """Доставляет результаты запуска во внешний приёмник."""
+    _run, table, _definition = await load_run_table(
+        session,
+        run_id,
+        query=query,
+        only_invalid=only_invalid,
+    )
+    result = await deliver(table, kind=kind, target=target, options=options)
+    log.info(
+        "export.delivered",
+        run_id=run_id,
+        kind=result.kind,
+        ok=result.ok,
+        records=result.records,
+    )
+    return result
 
 
 async def build_spec_markdown(

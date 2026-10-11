@@ -30,6 +30,11 @@ export function RunsPage() {
   const [showDiff, setShowDiff] = useState(false)
   const [showJournal, setShowJournal] = useState(false)
   const [showHeal, setShowHeal] = useState(false)
+  const [showDeliver, setShowDeliver] = useState(false)
+  const [deliverKind, setDeliverKind] = useState<'webhook' | 'sheets' | 'postgres'>('webhook')
+  const [deliverTarget, setDeliverTarget] = useState('')
+  const [deliverToken, setDeliverToken] = useState('')
+  const [deliverTable, setDeliverTable] = useState('upa_export')
   const [notice, setNotice] = useState<string | null>(null)
 
   const runs = useQuery({
@@ -66,6 +71,37 @@ export function RunsPage() {
     queryFn: () => api.runHeal(selectedId as string, true),
     enabled: Boolean(selectedId) && showHeal,
     retry: false,
+  })
+
+  const deliver = useMutation({
+    mutationFn: () => {
+      if (!selectedId) throw new Error('Не выбран запуск')
+      const options: Record<string, unknown> = {}
+      if (deliverKind === 'sheets' && deliverToken) {
+        options.access_token = deliverToken
+      }
+      if (deliverKind === 'postgres') {
+        options.table = deliverTable || 'upa_export'
+      }
+      return api.deliverRun(selectedId, {
+        kind: deliverKind,
+        target: deliverTarget,
+        options,
+        q: query || undefined,
+        only_invalid: onlyInvalid,
+      })
+    },
+    onSuccess: (result) => {
+      setNotice(
+        result.ok
+          ? `Доставлено (${result.kind}): ${result.detail}, записей ${result.records}`
+          : `Приёмник ответил ошибкой: ${result.detail}`,
+      )
+      setError(null)
+    },
+    onError: (err: unknown) => {
+      setError(err instanceof ApiError ? err.message : String(err))
+    },
   })
 
   const applyHeal = useMutation({
@@ -273,6 +309,9 @@ export function RunsPage() {
               <button className="btn" onClick={() => setShowHeal((value) => !value)}>
                 {showHeal ? 'Скрыть починку' : 'Self-heal'}
               </button>
+              <button className="btn" onClick={() => setShowDeliver((value) => !value)}>
+                {showDeliver ? 'Скрыть доставку' : 'Sheets / webhook / PG'}
+              </button>
             </div>
           }
         >
@@ -312,6 +351,82 @@ export function RunsPage() {
               только с пропусками
             </label>
           </div>
+
+          {showDeliver ? (
+            <div className="form-grid" style={{ marginTop: 12 }}>
+              <label className="field">
+                <span>Приёмник</span>
+                <select
+                  className="input"
+                  value={deliverKind}
+                  onChange={(event) =>
+                    setDeliverKind(event.target.value as 'webhook' | 'sheets' | 'postgres')
+                  }
+                >
+                  <option value="webhook">Webhook (JSON POST)</option>
+                  <option value="sheets">Google Sheets</option>
+                  <option value="postgres">PostgreSQL</option>
+                </select>
+              </label>
+              <label className="field form-grid__full">
+                <span>
+                  {deliverKind === 'webhook'
+                    ? 'URL webhook'
+                    : deliverKind === 'sheets'
+                      ? 'Spreadsheet ID'
+                      : 'DSN (postgresql://user:pass@host/db)'}
+                </span>
+                <input
+                  className="input"
+                  value={deliverTarget}
+                  onChange={(event) => setDeliverTarget(event.target.value)}
+                  placeholder={
+                    deliverKind === 'webhook'
+                      ? 'https://example.com/hooks/upa'
+                      : deliverKind === 'sheets'
+                        ? '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms'
+                        : 'postgresql://upa:upa@localhost:5432/upa'
+                  }
+                />
+              </label>
+              {deliverKind === 'sheets' ? (
+                <label className="field form-grid__full">
+                  <span>OAuth access token</span>
+                  <input
+                    className="input"
+                    type="password"
+                    value={deliverToken}
+                    onChange={(event) => setDeliverToken(event.target.value)}
+                    placeholder="ya29.…"
+                  />
+                </label>
+              ) : null}
+              {deliverKind === 'postgres' ? (
+                <label className="field">
+                  <span>Таблица</span>
+                  <input
+                    className="input"
+                    value={deliverTable}
+                    onChange={(event) => setDeliverTable(event.target.value)}
+                  />
+                </label>
+              ) : null}
+              <div className="btn-row form-grid__full">
+                <button
+                  className="btn btn--primary"
+                  type="button"
+                  disabled={!deliverTarget || deliver.isPending}
+                  onClick={() => deliver.mutate()}
+                >
+                  {deliver.isPending ? 'Отправляю…' : 'Отправить'}
+                </button>
+                <span className="muted small">
+                  Для PostgreSQL нужен драйвер <code>psycopg</code>. Sheets — токен с правом
+                  spreadsheets.
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           {showDiff ? (
             <div style={{ marginTop: 12 }}>

@@ -299,6 +299,23 @@ export const api = {
       removed_items: Array<Record<string, unknown>>
       changed_items: Array<Record<string, unknown>>
     }>(`${API_PREFIX}/runs/${runId}/diff${query({ against })}`),
+  deliverRun: (
+    runId: string,
+    payload: {
+      kind: 'webhook' | 'sheets' | 'postgres'
+      target: string
+      options?: Record<string, unknown>
+      q?: string
+      only_invalid?: boolean
+    },
+  ) =>
+    post<{
+      kind: string
+      ok: boolean
+      records: number
+      detail: string
+      response: Record<string, unknown> | null
+    }>(`${API_PREFIX}/runs/${runId}/deliver`, payload),
   runArtifacts: (runId: string) =>
     request<
       Array<{
